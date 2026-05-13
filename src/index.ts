@@ -17,6 +17,34 @@ function parseArgs(argv: string[]): { once: boolean; noApi: boolean; configPath:
   };
 }
 
+async function closeServer(server: Awaited<ReturnType<typeof startApiServer>> | undefined): Promise<void> {
+  if (!server) {
+    return;
+  }
+
+  const forceClosableServer = server as typeof server & {
+    closeIdleConnections?: () => void;
+    closeAllConnections?: () => void;
+  };
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve();
+    };
+    server.close(() => finish());
+    forceClosableServer.closeIdleConnections?.();
+    const forceClose = setTimeout(() => {
+      forceClosableServer.closeAllConnections?.();
+      finish();
+    }, 1_000);
+    forceClose.unref?.();
+  });
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const logger = rootLogger.child("bootstrap");
@@ -61,15 +89,33 @@ async function main(): Promise<void> {
   runtime.telegramBot?.start();
   await runtime.orchestrator.start();
 
+  let shuttingDown = false;
   const shutdown = (signal: string): void => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
     rootLogger.warn(`收到 ${signal}，准备停止服务`);
-    runtime.orchestrator.stop();
-    server?.close();
-    void runtime.state.flush()
-      .catch((error) => {
+
+    void (async () => {
+      runtime.orchestrator.stop();
+      try {
+        await closeServer(server);
+        await runtime.state.flush();
+      } catch (error) {
         rootLogger.error("停止服务时状态刷盘失败", { error });
-      })
-      .finally(() => runtime.shutdown());
+        process.exitCode = 1;
+      }
+
+      try {
+        await runtime.shutdown();
+      } catch (error) {
+        rootLogger.error("停止服务时资源释放失败", { error });
+        process.exitCode = 1;
+      } finally {
+        process.exit(process.exitCode ?? 0);
+      }
+    })();
   };
 
   process.on("SIGINT", () => {
