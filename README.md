@@ -9,10 +9,12 @@
 - 主循环 / 高频循环的自研编排器
 - 风控、组合管理、执行层的可扩展实现
 - 文件审计日志与控制台通知
+- dry-run paper trading：用真实 Meteora 池子数据近似更新虚拟仓位 PnL
 
 当前版本默认会优先尝试真实 HTTP 数据源与 Meteora 池子发现接口；如果外部服务不可用，再自动回退到 `config/sample-pools.json` 和 mock provider，方便在没有真实 RPC、钱包和外部 API Key 的情况下先验证流程。
+默认 `execution.mode: dry_run` 不会真实下单；当 `paper_trading.enabled=true` 时，系统会在主循环中用真实 Meteora 池子的 active bin、价格与 fee/TVL 对虚拟仓位做近似估值。如果池子数据来自 mock fallback，paper trading 只写 stale 快照，不伪造收益。
 
-从这次改动开始，仓库额外提供了 `config/agent.canary.yaml` 和 `config/agent.prod.yaml`。它们会打开 production guardrails：禁用运行时 mock 数据源 / mock LLM、要求 live 启动前完成 signer + RPC 预检、要求状态主存储为 PostgreSQL，并默认启用单实例锁与持久化失败自动降级。
+从这次改动开始，仓库额外提供了 `config/agent.canary.yaml` 和 `config/agent.prod.yaml`。它们会打开 production guardrails：禁用运行时 mock 数据源 / mock LLM、要求 live 启动前完成 signer + RPC 预检、要求状态主存储为 SQLite，并默认启用单实例锁与持久化失败自动降级。
 当前 preflight 会额外检查主数据源、池子发现源、Jupiter / Jito / gateway 可达性，以及本地活跃仓位的 wallet / positionPubkey 与 signer、链上账户是否一致。
 如果配置了 `guardrails.active_position_reconcile=repair`，`live_sdk` 启动时会先回放最近审计里的 `stateOperations`、恢复 pending 交易，再把链上已不存在的本地 active 安全收敛为 closed；`live_gateway` 则会按远端镜像主动修复本地 active positions。
 
@@ -48,7 +50,7 @@ npm run start -- --config config/agent.live-sdk.yaml
 
 ```bash
 cp .env.prod.example .env.prod
-# 填入真实 RPC / wallet / Jupiter / 数据源 / PostgreSQL / OpenAI 凭据
+# 填入真实 RPC / wallet / Jupiter / 数据源 / OpenAI 凭据
 set -a
 source ./.env.prod
 set +a
@@ -61,9 +63,9 @@ Canary 稳定后，再切到正式配置：
 npm run start -- --config config/agent.prod.yaml
 ```
 
-这份 prod 配置默认会 fail fast：如果 signer 与 `wallet.active_address` 不一致、没有可写 RPC、主数据源或池子发现源不可用、Jupiter / gateway 预检失败、活跃仓位与 signer / 链上账户不一致、仍在使用 mock LLM，或者状态主存储不是 PostgreSQL，进程会直接启动失败。
+这份 prod 配置默认会 fail fast：如果 signer 与 `wallet.active_address` 不一致、没有可写 RPC、主数据源或池子发现源不可用、Jupiter / gateway 预检失败、活跃仓位与 signer / 链上账户不一致，或者仍在使用 mock LLM，进程会直接启动失败。
 
-更完整的上线约束、Canary、监控和回滚演练清单见 [`docs/production-readiness.md`](./docs/production-readiness.md)。
+真实上线请先读完整手册 [`docs/mainnet-live-runbook.md`](./docs/mainnet-live-runbook.md)；上线门禁清单见 [`docs/production-readiness.md`](./docs/production-readiness.md)。
 
 如需常驻运行：
 
@@ -102,6 +104,8 @@ WALLET_PRIVATE_KEY='[...]' XAGENT_WALLET_KEY='your-passphrase' \
 - `GET /status`：额外包含 `storage` 与 `wallet` 运行时状态
 - `GET /skills`：所有 Skill 配置、当前生命周期状态与运行统计
 - `GET /skills/stats`：按 Skill 版本聚合的运行统计
+- `GET /skills/optimizer/recommendations`：查看 dry-run Skill Optimizer 生成的参数优化建议
+- `POST /skills/optimizer/evaluate`：手动刷新 Skill Optimizer 建议；只更新建议，不自动修改 Skill 参数
 - `GET /positions?active=true`：仓位列表，可只看活跃仓位
 - `GET /audit/events?limit=20`：最近审计事件
 - `POST /control/pause`：全局暂停
@@ -114,8 +118,9 @@ WALLET_PRIVATE_KEY='[...]' XAGENT_WALLET_KEY='your-passphrase' \
 - `PUT /skills/:id/params`：热更新策略参数
 - `POST /skills/:id/rollback`：回滚到指定版本
 - `GET /metrics`：Prometheus 文本格式指标
+- `GET /paper-trading/snapshots`：查看 paper trading 仓位估值快照，支持 `positionId`、`skillId`、`limit` 过滤
 
-`GET /status` 和 `GET /health` 现在会额外返回 execution backend 状态与当前 pool source 名称，便于确认当前是 `dry_run`、`live_sdk` 还是 `live_gateway`，以及候选池来自真实源还是 fallback。
+`GET /status` 和 `GET /health` 现在会额外返回 execution backend 状态、paper trading 汇总与当前 pool source 名称，便于确认当前是 `dry_run`、`live_sdk` 还是 `live_gateway`，以及候选池来自真实源还是 fallback。
 Skill 的启停、Canary 比例、参数热更新和 rollback 结果现在会写回运行时状态快照，进程重启后仍会保留最近一次控制面变更。
 
 Dashboard 当前覆盖：
@@ -128,7 +133,7 @@ Dashboard 当前覆盖：
 - Storage / Wallet 面板：展示 state/audit/cache backend、wallet source、key version、secret forwarding 开关
 - 最近审计事件面板
 - 仓位矩阵：支持单仓强退
-- Skill 控制台：支持启用、停用、Canary 切换，并展示按版本聚合的仓位 / 胜率 / 费用 / 估算盈亏
+- Skill 控制台：支持启用、停用、Canary 切换，并展示按版本聚合的仓位 / 胜率 / 费用 / paper 费用 / 估算盈亏 / 最大回撤，以及 dry-run Skill Optimizer 的只读参数建议
 - 主循环会按 `risk.fee_claim_interval_hours` 自动触发手续费检查/提取；当 `lincoln_exit_threshold` 命中时，会自动转为平仓动作
 
 示例：
@@ -262,11 +267,36 @@ export JITO_AUTH_KEY='...'
 当前 runtime 会按以下顺序装配：
 
 - `meteora_http -> mock_meteora`：真实池子发现失败时回退本地样例数据
-- `gmgn -> provider_a -> provider_b -> mock_gmgn`：按优先级尝试真实数据源，失败后回退 mock
-- `postgres -> file`：当 `storage.backend=postgres` 且 `mirror_to_file=true` 时，状态和审计会同时落 PostgreSQL 与本地文件
-- `redis -> memory`：当配置了 `REDIS_URL` 时，数据源缓存会切到 Redis；否则回退进程内缓存
+- `gmgn_cli -> provider_a -> provider_b -> mock_gmgn`：按优先级尝试真实数据源，失败后回退 mock
+- `sqlite -> file`：当 `storage.backend=sqlite` 且 `mirror_to_file=true` 时，状态和审计会同时落 SQLite 与本地文件
+- `memory cache`：数据源缓存默认保留在进程内存中，外部数据源不可用时会先尝试过期缓存再走保守 fallback
 
-这些 provider 都走统一的 HTTP 规范化层。配置里可以为每个 provider 指定：
+GMGN 官方结构化数据不要抓 `https://gmgn.ai` 网页接口；默认配置使用 `gmgn-cli`：
+
+```bash
+npm install -g gmgn-cli
+export GMGN_API_KEY='...'
+gmgn-cli market trending --chain sol --interval 1h --limit 3 --raw
+```
+
+也可以把 `GMGN_API_KEY` 放在 `~/.config/gmgn/.env`，CLI 会自行读取。若 `gmgn-cli` 返回 `401` / `403` 且密钥正确，优先检查出口是否走 IPv6；GMGN CLI 当前要求 IPv4 出口。
+
+## Paper Trading
+
+`paper_trading` 只在 `execution.mode=dry_run` 下生效，目标是为策略迭代提供“真实池子数据 + 不下单”的近似收益闭环。默认参数在 `config/agent.yaml` 中：
+
+- `valuation_interval_ms` 控制单个仓位最短估值间隔。
+- `fee_capture_rate` 控制把 24h fee/TVL 折算为虚拟可捕获手续费的比例。
+- `max_fee_tvl_ratio_24h` 控制 paper 估值可使用的 24h fee/TVL 上限，避免低 TVL 异常池子把虚拟手续费放大到不可迭代的水平。
+- `price_exposure` 控制 token 价格变化对 LP mark value 的影响权重。
+- `out_of_range_penalty_pct_per_bin_width` 与 `max_out_of_range_penalty_pct` 控制出界惩罚。
+- `snapshot_retention` 控制保存在 runtime state 中的估值快照条数。
+
+这是 v1 近似估值，不等同于链上精确 DLMM position quote 或历史回测。它不会查询真实 position account，也不会提交交易；后续可以在同一服务接口下升级为 RPC / Meteora SDK 精确估值。
+
+Meteora 池子发现默认同时限制 `discovery_min_volume_24h` 和 `discovery_min_tvl`。前者过滤成交不足的池子，后者过滤 TVL 太低、fee/TVL 极端失真的池子。
+
+HTTP provider 仍走统一的 HTTP 规范化层。配置里可以为 `provider_a` / `provider_b` 指定：
 
 - `base_url` 或 `base_url_env`
 - `api_key_env` 与 `api_key_header`
@@ -292,23 +322,16 @@ export JITO_AUTH_KEY='...'
 - 状态快照写入 `runtime/state.json`
 - 审计写入 `runtime/audit/*.jsonl`
 - 运行时单实例锁默认写入 `runtime/runtime.lock`
-- 数据源缓存保留在内存中，除非显式提供 `REDIS_URL`
+- 数据源缓存保留在进程内存中
 
-`storage.backend=postgres` 时：
+`storage.backend=sqlite` 时：
 
-- 状态快照写入 PostgreSQL `runtime_state_snapshots`
-- 审计写入 PostgreSQL `audit_events`
-- 单实例保护默认升级为 PostgreSQL advisory lock
+- 状态快照写入 SQLite `runtime_state_snapshots`
+- 审计写入 SQLite `audit_events`
+- 单实例保护仍使用本地 lock 文件
 - `mirror_to_file=true` 时继续镜像写到本地文件，便于 grep / 备份 / 离线分析
 
-无论 file / postgres backend，`guardrails.persist_failure_strategy=close_only_then_pause` 都会在状态持久化连续失败时先切 `close_only`，再升级到 `emergency_paused`。
-
-最小环境变量：
-
-```bash
-export POSTGRES_URL='postgres://user:pass@127.0.0.1:5432/xagent'
-export REDIS_URL='redis://127.0.0.1:6379'
-```
+无论 file / sqlite backend，`guardrails.persist_failure_strategy=close_only_then_pause` 都会在状态持久化连续失败时先切 `close_only`，再升级到 `emergency_paused`。
 
 表结构会在运行时自动创建，不需要手工执行 migration。
 
@@ -348,13 +371,15 @@ src/utils/             通用工具
 ## 注意事项
 
 - 默认配置仍然是 `dry_run`，不会真正发起链上交易。
+- 默认 dry-run 会启用 paper trading 近似估值；它适合比较 Skill 表现，但不能替代小额 live canary 或链上精确回测。
 - 运行时状态现在会落到 `runtime/state.json`，默认重启后会恢复仓位与最近一次循环快照。
-- Skill 运行统计当前是从持久化仓位快照实时聚合出来的，不依赖数据库；后续接 PostgreSQL 时可以把这层平移到底层存储。
-- PostgreSQL / Redis 现在已经接入为可选 backend；未配置相关环境变量时会自动回退到 file / memory。
+- Skill 运行统计当前是从持久化仓位快照实时聚合出来的，不依赖外部数据库。
+- Skill Optimizer 第一版只在 `dry_run` + `paper_trading` 下生成只读建议，不会自动 apply、Canary、晋级或 rollback。
+- 当前持久化 backend 支持 file / SQLite；数据源缓存使用进程内 memory backend。
 - API 控制面在 loopback 地址上支持可选 Bearer Token 认证；如果监听到非 loopback 地址，则必须配置 `XAGENT_API_TOKEN`。设置后，除 `/health` 与静态 dashboard 资源外，其余接口都会要求 `Authorization: Bearer <token>`。
 - Telegram / Discord 通知器已经接好，但只有相关环境变量存在时才会启用。
 - 如果切到 `execution.mode=live_sdk`，需要至少提供真实 RPC、可用钱包 secret，以及可访问的 Jupiter endpoint；建议先用小额度仓位验证。
-- 如果切到 `config/agent.prod.yaml`，会额外启用 guardrails：禁止运行时 mock 数据源 / mock LLM、要求 live preflight 成功、要求 PostgreSQL 作为状态主存储，并在 `live_sdk` 下对“链上已不存在”的本地 active 仓位做启动时安全收敛。
+- 如果切到 `config/agent.prod.yaml`，会额外启用 guardrails：禁止运行时 mock 数据源 / mock LLM、要求 live preflight 成功、使用 SQLite 作为状态主存储，并在 `live_sdk` 下对“链上已不存在”的本地 active 仓位做启动时安全收敛。
 - `live_sdk` 在 `submission_strategy` 包含 Jito 时，启动前会额外调用 block engine 的 `getTipAccounts` 做可达性检查；`live_gateway` 在配置了 `positions_path` 后，会校验 gateway 端活跃仓位和本地状态是否完全一致。
 - 如果要让 `currentValueUsd` 有意义，需要提供 `SOL_PRICE_USD`（或在配置里写死 `valuation.sol_price_usd`）；未配置时会回退为 `0`，避免使用硬编码占位价。
 - 如果切到 `execution.mode=live_gateway`，需要提供 `EXECUTION_GATEWAY_URL`，并让外部 gateway 实现 `/health` 与 `/v1/actions/execute`。

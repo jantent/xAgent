@@ -1,0 +1,140 @@
+{
+  "pools": [
+    {
+      "address": "POOLPEPECAT1111111111111111111111111111111",
+      "tokenMint": "PEPECAT1111111111111111111111111111111111",
+      "tokenSymbol": "PEPECAT",
+      "quoteMint": "So11111111111111111111111111111111111111112",
+      "binStep": 80,
+      "feeRatePct": 3.5,
+      "lincolnScore": 6.8,
+      "safetyScore": 82,
+      "organicScore": 78,
+      "grade": "S",
+      "lifecycleStage": "hype",
+      "tvl": 92000,
+      "vol24h": 740000,
+      "feeTvlRatio24h": 8.04,
+      "mcap": 4800000,
+      "smartMoneyNet": 120000,
+      "dataSource": "mock_meteora",
+      "meta": {
+        "description": "猫咪主题 meme，社区情绪很高，最近 24 小时成交量激增。",
+        "activeBinId": 8420,
+        "narrative": "animal meme"
+      }
+    },
+    {
+      "address": "POOLDOGWOK11111111111111111111111111111111",
+      "tokenMint": "DOGWOK111111111111111111111111111111111111",
+      "tokenSymbol": "DOGWOK",
+      "quoteMint": "So11111111111111111111111111111111111111112",
+      "binStep": 100,
+      "feeRatePct": 2.8,
+      "lincolnScore": 2.4,
+      "safetyScore": 66,
+      "organicScore": 61,
+      "grade": "A",
+      "lifecycleStage": "plateau",
+      "tvl": 140000,
+      "vol24h": 360000,
+      "feeTvlRatio24h": 2.57,
+      "mcap": 12000000,
+      "smartMoneyNet": 22000,
+      "dataSource": "mock_meteora",
+      "meta": {
+        "description": "热度仍在，但已从极端 hype 回落到稳态成交。",
+        "activeBinId": 6210,
+        "narrative": "dog meme"
+      }
+    },
+    {
+      "address": "POOLRUGFOX11111111111111111111111111111111",
+      "tokenMint": "RUGFOX111111111111111111111111111111111111",
+      "tokenSymbol": "RUGFOX",
+      "quoteMint": "So11111111111111111111111111111111111111112",
+      "binStep": 60,
+      "feeRatePct": 4.2,
+      "lincolnScore": 5.1,
+      "safetyScore": 28,
+      "organicScore": 35,
+      "grade": "C",
+      "lifecycleStage": "hype",
+      "tvl": 43000,
+      "vol24h": 680000,
+      "feeTvlRatio24h": 15.81,
+      "mcap": 1200000,
+      "smartMoneyNet": -98000,
+      "dataSource": "mock_meteora",
+      "meta": {
+        "description": "交易量非常高，但持币结构和开发者地址行为存在明显异常。",
+        "activeBinId": 10540,
+        "narrative": "high risk animal meme"
+      }
+    }
+  ],
+  "tokenSafetyByMint": {
+    "PEPECAT1111111111111111111111111111111111": {
+      "mint": "PEPECAT1111111111111111111111111111111111",
+      "safetyScore": 82,
+      "verdict": "SAFE",
+      "source": "mock_gmgn",
+      "topHolderPct": 0.11,
+      "rugProbability": 0.04,
+      "isStale": false
+    },
+    "DOGWOK111111111111111111111111111111111111": {
+      "mint": "DOGWOK111111111111111111111111111111111111",
+      "safetyScore": 66,
+      "verdict": "WARNING",
+      "source": "mock_gmgn",
+      "topHolderPct": 0.16,
+      "rugProbability": 0.12,
+      "isStale": false
+    },
+    "RUGFOX111111111111111111111111111111111111": {
+      "mint": "RUGFOX111111111111111111111111111111111111",
+      "safetyScore": 28,
+      "verdict": "DANGER",
+      "source": "mock_gmgn",
+      "topHolderPct": 0.47,
+      "rugProbability": 0.72,
+      "isStale": false
+    }
+  },
+  "smartMoneyByMint": {
+    "PEPECAT1111111111111111111111111111111111": {
+      "mint": "PEPECAT1111111111111111111111111111111111",
+      "buy24h": 240000,
+      "sell24h": 120000,
+      "net24h": 120000,
+      "source": "mock_gmgn",
+      "isStale": false
+    },
+    "DOGWOK111111111111111111111111111111111111": {
+      "mint": "DOGWOK111111111111111111111111111111111111",
+      "buy24h": 98000,
+      "sell24h": 76000,
+      "net24h": 22000,
+      "source": "mock_gmgn",
+      "isStale": false
+    },
+    "RUGFOX111111111111111111111111111111111111": {
+      "mint": "RUGFOX111111111111111111111111111111111111",
+      "buy24h": 64000,
+      "sell24h": 162000,
+      "net24h": -98000,
+      "source": "mock_gmgn",
+      "isStale": false
+    }
+  },
+  "urgentSignals": [
+    {
+      "provider": "mock_gmgn",
+      "signalType": "dev_sell",
+      "tokenMint": "RUGFOX111111111111111111111111111111111111",
+      "severity": "critical",
+      "message": "RUGFOX 开发者地址在 10 分钟内卖出超 18% 持仓。"
+    }
+  ]
+}

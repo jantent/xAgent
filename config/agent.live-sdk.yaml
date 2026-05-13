@@ -1,0 +1,201 @@
+# 该配置用于真实 live_sdk 联调。
+# 默认仍保留真实数据源优先、mock 兜底的装配逻辑；
+# 你补齐 .env.live-sdk 后，可直接配合此文件启动。
+
+system:
+  mode: "normal"
+  main_loop_interval_ms: 1800000
+  high_freq_interval_ms: 5000
+  max_concurrent_positions: 40
+
+valuation:
+  sol_price_usd_env: "SOL_PRICE_USD"
+
+api:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8787
+  auth:
+    bearer_token_env: "XAGENT_API_TOKEN"
+
+wallet:
+  active_address: "9xBvDemoWallet111111111111111111111111111111"
+  mode: "injected"
+  secret:
+    plaintext_env: "WALLET_PRIVATE_KEY"
+    encrypted_file_path: "./config/wallet.enc.json"
+    encryption_key_env: "XAGENT_WALLET_KEY"
+    key_version: "v1"
+    allow_secret_forwarding: false
+  limits:
+    per_transaction_max_sol: 5.0
+    daily_cumulative_max_sol: 50.0
+
+rpc:
+  primary:
+    url_env: "PRIMARY_RPC_URL"
+    timeout_ms: 10000
+  backup:
+    url_env: "HELIUS_RPC_URL"
+    timeout_ms: 10000
+  grpc:
+    url_env: "GRPC_URL"
+  jito:
+    endpoint: "https://mainnet.block-engine.jito.wtf"
+    auth_key_env: "JITO_AUTH_KEY"
+    tip_lamports: 10000
+    max_retries: 3
+
+execution:
+  mode: "live_sdk"
+  live:
+    executor: "sdk"
+    supported_actions: ["open", "close", "rebalance", "claim", "emergency_exit"]
+    submission_strategy: "jito_then_rpc"
+    gateway:
+      base_url_env: "EXECUTION_GATEWAY_URL"
+      api_key_env: "EXECUTION_GATEWAY_API_KEY"
+      timeout_ms: 15000
+      health_path: "/health"
+      execute_path: "/v1/actions/execute"
+      positions_path: "/v1/positions"
+    jupiter:
+      quote_base_url: "https://api.jup.ag/swap/v1"
+      swap_base_url: "https://api.jup.ag/swap/v1"
+      slippage_bps: 100
+      api_key_env: "JUPITER_API_KEY"
+      wrap_and_unwrap_sol: true
+      prioritization_fee_lamports: 100000
+    meteora:
+      dlmm_api_base_url: "https://dlmm.datapi.meteora.ag"
+
+paper_trading:
+  enabled: true
+  valuation_interval_ms: 300000
+  fee_capture_rate: 0.35
+  max_fee_tvl_ratio_24h: 250
+  price_exposure: 0.5
+  out_of_range_penalty_pct_per_bin_width: 2
+  max_out_of_range_penalty_pct: 35
+  snapshot_retention: 5000
+
+skill_optimizer:
+  enabled: false
+  min_closed_positions: 5
+  min_snapshots: 20
+  evaluation_interval_ms: 1800000
+  max_patch_pct: 20
+
+guardrails:
+  allow_mock_data: true
+  allow_mock_llm: true
+  require_live_preflight: false
+  active_position_reconcile: "repair"
+  persist_failure_strategy: "close_only_then_pause"
+
+storage:
+  backend: "file"
+  state_snapshot_path: "./runtime/state.json"
+  audit_dir: "./runtime/audit"
+  audit_query_limit: 30
+  mirror_to_file: true
+  runtime_lock:
+    enabled: true
+    key: "xagent:live-sdk"
+    file_path: "./runtime/runtime.lock"
+    stale_timeout_ms: 120000
+  sqlite:
+    db_path: "./runtime/xagent.db"
+
+data_providers:
+  gmgn:
+    priority: 1
+    kind: "gmgn_cli"
+    command: "gmgn-cli"
+    chain: "sol"
+    api_key_env: "GMGN_API_KEY"
+    timeout_ms: 10000
+    circuit_breaker:
+      failure_threshold: 5
+      recovery_time_ms: 60000
+  provider_a:
+    priority: 2
+    base_url_env: "PROVIDER_A_URL"
+    api_key_env: "PROVIDER_A_KEY"
+    api_key_header: "x-api-key"
+    timeout_ms: 5000
+    health_path: "/health"
+    token_safety_path: "/v1/token/safety"
+    trending_path: "/v1/tokens/trending"
+    ohlcv_path: "/v1/token/ohlcv"
+    circuit_breaker:
+      failure_threshold: 5
+      recovery_time_ms: 60000
+  provider_b:
+    priority: 3
+    base_url_env: "PROVIDER_B_URL"
+    api_key_env: "PROVIDER_B_KEY"
+    api_key_header: "x-api-key"
+    timeout_ms: 5000
+    health_path: "/health"
+    token_safety_path: "/v1/token/safety"
+    ohlcv_path: "/v1/token/ohlcv"
+    circuit_breaker:
+      failure_threshold: 10
+      recovery_time_ms: 120000
+  cache:
+    stale_tolerance_ms: 300000
+    full_degradation_ms: 600000
+    auto_exit_ms: 1800000
+
+llm:
+  default:
+    provider: "openai"
+    model: "deepseek-chat"
+    api_key_env: "ANTHROPIC_AUTH_TOKEN"
+    base_url: "https://api.deepseek.com"
+    temperature: 0.2
+    max_tokens: 200
+  classification:
+    provider: "openai"
+    model: "deepseek-chat"
+    api_key_env: "ANTHROPIC_AUTH_TOKEN"
+    base_url: "https://api.deepseek.com"
+    temperature: 0.1
+    max_tokens: 120
+  fallback:
+    provider: "mock"
+    model: "mock-fallback"
+
+risk:
+  max_position_pct: 2.0
+  max_total_lp_pct: 20.0
+  max_token_exposure_pct: 5.0
+  max_narrative_pools: 5
+  stop_loss_pct: 30.0
+  max_alive_hours: 168
+  daily_max_loss_pct: 5.0
+  fee_claim_interval_hours: 8
+  lincoln_exit_threshold: 1.0
+
+notifications:
+  telegram:
+    bot_token_env: "TG_BOT_TOKEN"
+    chat_id_env: "TG_CHAT_ID"
+    levels: ["critical", "high", "medium"]
+  discord:
+    webhook_env: "DISCORD_WEBHOOK"
+    levels: ["critical", "high", "low"]
+
+meteora:
+  base_url: "https://dlmm.datapi.meteora.ag"
+  base_url_env: "METEORA_API_URL"
+  timeout_ms: 6000
+  health_path: "/health"
+  discovery_path: "/pools"
+  discovery_limit: 10
+  discovery_sort_by: "fee_tvl_ratio_24h:desc"
+  discovery_min_volume_24h: 10000
+  discovery_min_tvl: 5000
+  quote_mint: "So11111111111111111111111111111111111111112"
+  sample_pool_path: "./config/sample-pools.json"

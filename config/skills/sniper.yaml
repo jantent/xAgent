@@ -1,0 +1,48 @@
+id: "sniper"
+version: "3.0.0"
+name: "Sniper"
+description: "用于高热度、高 Lincoln、高安全分的新池，策略较激进，因此先灰度放量。"
+status: "canary"
+canaryPercent: 20
+params:
+  direction: "below"
+  distributionType: "Curve"
+  binCount: 30
+  binStepPreference: [60, 80]
+  feeRatePreference: [0.03, 0.05]
+  entryConditions:
+    - description: "Lincoln Score 至少 5.0。"
+      key: "lincolnScore"
+      operator: "gte"
+      value: 5.0
+    - description: "Safety Score 至少 70。"
+      key: "safetyScore"
+      operator: "gte"
+      value: 70
+  exitConditions:
+    - description: "如果 hype 快速消退，则优先止盈/止损退出。"
+      key: "lifecycleStage"
+      operator: "eq"
+      value: "decline"
+  rebalanceRules:
+    - description: "允许较高频重平衡以追逐热点，但每日不超过上限。"
+      trigger: "high_velocity"
+      action: "rebalance"
+      threshold: 3
+riskLimits:
+  maxPositionSizePercent: 1
+  maxTotalExposurePercent: 5
+  maxConcurrentPositions: 5
+  stopLossPercent: 15
+  maxAliveHours: 24
+  maxDailyRebalances: 10
+applicability:
+  minLincolnScore: 5.0
+  minSafetyScore: 70
+  minMcap: 200000
+  maxMcap: 10000000
+  lifecycleStages: ["birth", "hype"]
+changelog: "v3.0 切换为 Curve 分布，并保留 20% 灰度。"
+previousVersion: "2.4.0"
+createdAt: "2026-03-28T00:00:00.000Z"
+updatedAt: "2026-03-28T00:00:00.000Z"

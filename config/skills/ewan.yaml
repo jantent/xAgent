@@ -1,0 +1,47 @@
+id: "ewan"
+version: "1.0.0"
+name: "Ewan"
+description: "适用于市值更大、生命周期更长的成熟池，支持双边部署。"
+status: "disabled"
+canaryPercent: 0
+params:
+  direction: "both"
+  distributionType: "Spot"
+  binCount: 61
+  binStepPreference: [20, 40]
+  feeRatePreference: [0.01, 0.02]
+  entryConditions:
+    - description: "市值至少 3000 万美元。"
+      key: "mcap"
+      operator: "gte"
+      value: 30000000
+    - description: "Lincoln Score 至少 3.0。"
+      key: "lincolnScore"
+      operator: "gte"
+      value: 3.0
+  exitConditions:
+    - description: "收益结构明显衰退时退出。"
+      key: "lincolnScore"
+      operator: "lt"
+      value: 1.5
+  rebalanceRules:
+    - description: "采用更低频的稳态 rebalance。"
+      trigger: "scheduled"
+      action: "rebalance"
+      threshold: 21600000
+riskLimits:
+  maxPositionSizePercent: 2
+  maxTotalExposurePercent: 12
+  maxConcurrentPositions: 6
+  stopLossPercent: 12
+  maxAliveHours: 168
+  maxDailyRebalances: 3
+applicability:
+  minLincolnScore: 3.0
+  minSafetyScore: 70
+  minMcap: 30000000
+  lifecycleStages: ["plateau"]
+changelog: "保留为后续成熟资产策略。"
+previousVersion: ~
+createdAt: "2026-03-28T00:00:00.000Z"
+updatedAt: "2026-03-28T00:00:00.000Z"

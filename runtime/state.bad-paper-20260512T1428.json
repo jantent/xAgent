@@ -1,0 +1,807 @@
+{
+  "startedAt": "2026-03-28T10:10:11.824Z",
+  "mode": "normal",
+  "manualPause": false,
+  "availableCapitalSol": 23.232999999999997,
+  "activePositions": [
+    {
+      "id": "position-1778566680306-vmt9k3",
+      "positionPubkey": "pubkey-1778566680306-bovfkz",
+      "poolAddress": "Gqkre2NRV9TgQRBZ5XC43yGXr9CV346qJvHk178hQnQ6",
+      "tokenMint": "56hrCR3n7danhHNjWaU4VeUHpE1eRE9VRBWpHRPKpump",
+      "tokenSymbol": "AINL",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -156,
+      "toBinId": -19,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 32641787.203786,
+      "pnlPercent": 93904213.18764383,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.306Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.306Z",
+      "paper": {
+        "entryActiveBinId": -18,
+        "entryPrice": 0.8661969344355694,
+        "currentValueSol": 338994.5706073942,
+        "unclaimedFeesSol": 338994.20965971303,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -18,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680318-5ntuks",
+      "positionPubkey": "pubkey-1778566680318-oeo8qu",
+      "poolAddress": "8gftUT5KZrs4w3CPBS14xb3J7KqKEmU744rxZANaNu6g",
+      "tokenMint": "7HgfXftRBBqsYtAEYcqjGLQrNJLL6Tww9ek4rE3Apump",
+      "tokenSymbol": "RKC",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -960,
+      "toBinId": -823,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 244372.692938,
+      "pnlPercent": 702914.5055742239,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.318Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.318Z",
+      "paper": {
+        "entryActiveBinId": -822,
+        "entryPrice": 0.000036721593448065,
+        "currentValueSol": 2537.8823651229486,
+        "unclaimedFeesSol": 2537.5214174417893,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -822,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680337-41i0hr",
+      "positionPubkey": "pubkey-1778566680337-mlv2g6",
+      "poolAddress": "3JB73MgAyDiwvPWLQsUvRZo9LW3RvMQPHfeshYZVuk6M",
+      "tokenMint": "usemtUxHat32zmoyLicWbiLXxnYi2eoELbHGE6Nugpj",
+      "tokenSymbol": "USEM",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -4293,
+      "toBinId": -4156,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 51943.20071,
+      "pnlPercent": 149330.86776912145,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.337Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.337Z",
+      "paper": {
+        "entryActiveBinId": -4155,
+        "entryPrice": 9.98362828e-10,
+        "currentValueSol": 539.4454326465285,
+        "unclaimedFeesSol": 539.084484965369,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -4155,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680343-sqip27",
+      "positionPubkey": "pubkey-1778566680343-510grp",
+      "poolAddress": "4mi42PFdCXkLnJKFJMJFijLAA1x3yf3JRncq2q3qdxXL",
+      "tokenMint": "7HgfXftRBBqsYtAEYcqjGLQrNJLL6Tww9ek4rE3Apump",
+      "tokenSymbol": "RKC",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -959,
+      "toBinId": -822,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 203907.947877,
+      "pnlPercent": 586505.0066240465,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.344Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.344Z",
+      "paper": {
+        "entryActiveBinId": -821,
+        "entryPrice": 0.000037180613366166,
+        "currentValueSol": 2117.644073912808,
+        "unclaimedFeesSol": 2117.2831262316486,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -821,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680357-74pe1c",
+      "positionPubkey": "pubkey-1778566680357-pqe6g7",
+      "poolAddress": "6m43PNgidB7NdUZZaCi5Lg8et8ccoXPMet5x6ju5qA5a",
+      "tokenMint": "Pren1FvFX6J3E4kXhJuCiAD5aDmGEb7qJRncwA8Lkhw",
+      "tokenSymbol": "ANTHROPIC",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": 3280,
+      "toBinId": 3417,
+      "depositedSol": 0.323,
+      "currentValueUsd": 79034.487101,
+      "pnlPercent": 254016.5381184054,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.357Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.357Z",
+      "paper": {
+        "entryActiveBinId": 3418,
+        "entryPrice": 925.0364805229016,
+        "currentValueSol": 820.7964181224495,
+        "unclaimedFeesSol": 820.4734649340437,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": 3418,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    }
+  ],
+  "allPositions": [
+    {
+      "id": "position-1774692611894-1jdkfo",
+      "positionPubkey": "pubkey-1774692611895-asyr1o",
+      "poolAddress": "POOLPEPECAT1111111111111111111111111111111",
+      "tokenMint": "PEPECAT1111111111111111111111111111111111",
+      "tokenSymbol": "PEPECAT",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": 8282,
+      "toBinId": 8419,
+      "depositedSol": 1.15,
+      "currentValueUsd": 172.5,
+      "pnlPercent": 0,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "closed",
+      "entryLincolnScore": 6.8,
+      "openedAt": "2026-03-28T10:10:11.895Z",
+      "maxAliveUntil": "2026-03-30T10:10:11.895Z",
+      "narrative": "mock 模型已收到请求，建议继续沿用规则引擎决策。摘要：请用一句中文概括该 meme token 的 narrative 与情绪状态：猫咪主题 meme，社区情绪很高，最近 24 小时成交量激增。",
+      "closedAt": "2026-03-31T03:19:42.367Z"
+    },
+    {
+      "id": "position-1774692611898-a9i1ps",
+      "positionPubkey": "pubkey-1774692611898-e7raor",
+      "poolAddress": "POOLDOGWOK11111111111111111111111111111111",
+      "tokenMint": "DOGWOK111111111111111111111111111111111111",
+      "tokenSymbol": "DOGWOK",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": 6072,
+      "toBinId": 6209,
+      "depositedSol": 0.95,
+      "currentValueUsd": 142.5,
+      "pnlPercent": 0,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "closed",
+      "entryLincolnScore": 2.4,
+      "openedAt": "2026-03-28T10:10:11.898Z",
+      "maxAliveUntil": "2026-03-30T10:10:11.898Z",
+      "narrative": "mock 模型已收到请求，建议继续沿用规则引擎决策。摘要：请用一句中文概括该 meme token 的 narrative 与情绪状态：热度仍在，但已从极端 hype 回落到稳态成交。",
+      "closedAt": "2026-03-31T03:19:42.368Z"
+    },
+    {
+      "id": "position-1778566680306-vmt9k3",
+      "positionPubkey": "pubkey-1778566680306-bovfkz",
+      "poolAddress": "Gqkre2NRV9TgQRBZ5XC43yGXr9CV346qJvHk178hQnQ6",
+      "tokenMint": "56hrCR3n7danhHNjWaU4VeUHpE1eRE9VRBWpHRPKpump",
+      "tokenSymbol": "AINL",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -156,
+      "toBinId": -19,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 32641787.203786,
+      "pnlPercent": 93904213.18764383,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.306Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.306Z",
+      "paper": {
+        "entryActiveBinId": -18,
+        "entryPrice": 0.8661969344355694,
+        "currentValueSol": 338994.5706073942,
+        "unclaimedFeesSol": 338994.20965971303,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -18,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680318-5ntuks",
+      "positionPubkey": "pubkey-1778566680318-oeo8qu",
+      "poolAddress": "8gftUT5KZrs4w3CPBS14xb3J7KqKEmU744rxZANaNu6g",
+      "tokenMint": "7HgfXftRBBqsYtAEYcqjGLQrNJLL6Tww9ek4rE3Apump",
+      "tokenSymbol": "RKC",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -960,
+      "toBinId": -823,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 244372.692938,
+      "pnlPercent": 702914.5055742239,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.318Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.318Z",
+      "paper": {
+        "entryActiveBinId": -822,
+        "entryPrice": 0.000036721593448065,
+        "currentValueSol": 2537.8823651229486,
+        "unclaimedFeesSol": 2537.5214174417893,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -822,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680337-41i0hr",
+      "positionPubkey": "pubkey-1778566680337-mlv2g6",
+      "poolAddress": "3JB73MgAyDiwvPWLQsUvRZo9LW3RvMQPHfeshYZVuk6M",
+      "tokenMint": "usemtUxHat32zmoyLicWbiLXxnYi2eoELbHGE6Nugpj",
+      "tokenSymbol": "USEM",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -4293,
+      "toBinId": -4156,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 51943.20071,
+      "pnlPercent": 149330.86776912145,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.337Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.337Z",
+      "paper": {
+        "entryActiveBinId": -4155,
+        "entryPrice": 9.98362828e-10,
+        "currentValueSol": 539.4454326465285,
+        "unclaimedFeesSol": 539.084484965369,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -4155,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680343-sqip27",
+      "positionPubkey": "pubkey-1778566680343-510grp",
+      "poolAddress": "4mi42PFdCXkLnJKFJMJFijLAA1x3yf3JRncq2q3qdxXL",
+      "tokenMint": "7HgfXftRBBqsYtAEYcqjGLQrNJLL6Tww9ek4rE3Apump",
+      "tokenSymbol": "RKC",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": -959,
+      "toBinId": -822,
+      "depositedSol": 0.36100000000000004,
+      "currentValueUsd": 203907.947877,
+      "pnlPercent": 586505.0066240465,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.344Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.344Z",
+      "paper": {
+        "entryActiveBinId": -821,
+        "entryPrice": 0.000037180613366166,
+        "currentValueSol": 2117.644073912808,
+        "unclaimedFeesSol": 2117.2831262316486,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": -821,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    },
+    {
+      "id": "position-1778566680357-74pe1c",
+      "positionPubkey": "pubkey-1778566680357-pqe6g7",
+      "poolAddress": "6m43PNgidB7NdUZZaCi5Lg8et8ccoXPMet5x6ju5qA5a",
+      "tokenMint": "Pren1FvFX6J3E4kXhJuCiAD5aDmGEb7qJRncwA8Lkhw",
+      "tokenSymbol": "ANTHROPIC",
+      "walletAddress": "9xBvDemoWallet111111111111111111111111111111",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "direction": "below",
+      "fromBinId": 3280,
+      "toBinId": 3417,
+      "depositedSol": 0.323,
+      "currentValueUsd": 79034.487101,
+      "pnlPercent": 254016.5381184054,
+      "isInRange": false,
+      "totalFeesClaimedSol": 0,
+      "rebalanceCount": 0,
+      "status": "active",
+      "entryLincolnScore": 10,
+      "openedAt": "2026-05-12T06:18:00.357Z",
+      "maxAliveUntil": "2026-05-14T06:18:00.357Z",
+      "paper": {
+        "entryActiveBinId": 3418,
+        "entryPrice": 925.0364805229016,
+        "currentValueSol": 820.7964181224495,
+        "unclaimedFeesSol": 820.4734649340437,
+        "lastValuationAt": "2026-05-12T06:19:23.380Z",
+        "lastActiveBinId": 3418,
+        "lastSource": "meteora_http"
+      },
+      "outOfRangeSince": "2026-05-12T06:19:23.380Z"
+    }
+  ],
+  "lastCycleResult": {
+    "cycleId": "cycle-1778566761492-812hpb",
+    "mode": "normal",
+    "scanned": 10,
+    "plans": 7,
+    "approved": 0,
+    "executed": 0,
+    "failed": 0,
+    "actions": [],
+    "results": [],
+    "startedAt": "2026-05-12T06:19:21.492Z",
+    "finishedAt": "2026-05-12T06:19:35.087Z"
+  },
+  "lastMainCycleAt": "2026-05-12T06:19:35.087Z",
+  "lastHighFreqTickAt": "2026-05-12T06:27:33.022Z",
+  "appliedActionIds": [
+    "action-1778566680292-21a90b",
+    "action-1778566680292-1k6yrt",
+    "action-1778566680292-he1q0e",
+    "action-1778566680292-5w5ndv",
+    "action-1778566680292-bvcyw0"
+  ],
+  "runtimeSkills": [
+    {
+      "id": "bread_n_butter",
+      "version": "2.1.0",
+      "name": "Bread 'n Butter",
+      "description": "适用于已进入 Hype 或 Plateau 阶段的主流 meme 池，优先做单边 SOL below 策略。",
+      "status": "active",
+      "canaryPercent": 0,
+      "params": {
+        "direction": "below",
+        "distributionType": "Spot",
+        "binCount": 69,
+        "binStepPreference": [
+          80,
+          100
+        ],
+        "feeRatePreference": [
+          0.02,
+          0.05
+        ],
+        "entryConditions": [
+          {
+            "description": "Lincoln Score 至少达到 1.5，保证基础 fee/tvl 结构仍有吸引力。",
+            "key": "lincolnScore",
+            "operator": "gte",
+            "value": 1.5
+          },
+          {
+            "description": "Safety Score 至少 50，避免把资金放进明显高危池。",
+            "key": "safetyScore",
+            "operator": "gte",
+            "value": 50
+          }
+        ],
+        "exitConditions": [
+          {
+            "description": "Lincoln Score 低于 1.0 时，说明收益结构衰减，应退出。",
+            "key": "lincolnScore",
+            "operator": "lt",
+            "value": 1
+          },
+          {
+            "description": "当持仓亏损超过 20% 时直接退出。",
+            "key": "pnlPercent",
+            "operator": "lte",
+            "value": -20
+          }
+        ],
+        "rebalanceRules": [
+          {
+            "description": "仓位持续出界超过 5 分钟时触发重平衡。",
+            "trigger": "out_of_range",
+            "action": "rebalance",
+            "threshold": 300000
+          }
+        ]
+      },
+      "riskLimits": {
+        "maxPositionSizePercent": 2,
+        "maxTotalExposurePercent": 10,
+        "maxConcurrentPositions": 10,
+        "stopLossPercent": 20,
+        "maxAliveHours": 72,
+        "maxDailyRebalances": 6
+      },
+      "applicability": {
+        "minLincolnScore": 1.5,
+        "minSafetyScore": 50,
+        "minMcap": 500000,
+        "maxMcap": 50000000,
+        "lifecycleStages": [
+          "hype",
+          "plateau"
+        ]
+      },
+      "changelog": "初始版本，作为系统默认主策略。",
+      "createdAt": "2026-03-28T00:00:00.000Z",
+      "updatedAt": "2026-03-28T00:00:00.000Z"
+    },
+    {
+      "id": "ewan",
+      "version": "1.0.0",
+      "name": "Ewan",
+      "description": "适用于市值更大、生命周期更长的成熟池，支持双边部署。",
+      "status": "disabled",
+      "canaryPercent": 0,
+      "params": {
+        "direction": "both",
+        "distributionType": "Spot",
+        "binCount": 61,
+        "binStepPreference": [
+          20,
+          40
+        ],
+        "feeRatePreference": [
+          0.01,
+          0.02
+        ],
+        "entryConditions": [
+          {
+            "description": "市值至少 3000 万美元。",
+            "key": "mcap",
+            "operator": "gte",
+            "value": 30000000
+          },
+          {
+            "description": "Lincoln Score 至少 3.0。",
+            "key": "lincolnScore",
+            "operator": "gte",
+            "value": 3
+          }
+        ],
+        "exitConditions": [
+          {
+            "description": "收益结构明显衰退时退出。",
+            "key": "lincolnScore",
+            "operator": "lt",
+            "value": 1.5
+          }
+        ],
+        "rebalanceRules": [
+          {
+            "description": "采用更低频的稳态 rebalance。",
+            "trigger": "scheduled",
+            "action": "rebalance",
+            "threshold": 21600000
+          }
+        ]
+      },
+      "riskLimits": {
+        "maxPositionSizePercent": 2,
+        "maxTotalExposurePercent": 12,
+        "maxConcurrentPositions": 6,
+        "stopLossPercent": 12,
+        "maxAliveHours": 168,
+        "maxDailyRebalances": 3
+      },
+      "applicability": {
+        "minLincolnScore": 3,
+        "minSafetyScore": 70,
+        "minMcap": 30000000,
+        "lifecycleStages": [
+          "plateau"
+        ]
+      },
+      "changelog": "保留为后续成熟资产策略。",
+      "createdAt": "2026-03-28T00:00:00.000Z",
+      "updatedAt": "2026-03-28T00:00:00.000Z"
+    },
+    {
+      "id": "sawtooth",
+      "version": "1.3.0",
+      "name": "Sawtooth BidAsk",
+      "description": "适用于波动偏大、短线有回撤风险的池子，采用 BidAsk 分布增强防守。",
+      "status": "active",
+      "canaryPercent": 0,
+      "params": {
+        "direction": "below",
+        "distributionType": "BidAsk",
+        "binCount": 138,
+        "binStepPreference": [
+          80,
+          100
+        ],
+        "feeRatePreference": [
+          0.03,
+          0.05
+        ],
+        "entryConditions": [
+          {
+            "description": "Lincoln Score 至少 2.0，覆盖更高波动下的调仓与 gas 成本。",
+            "key": "lincolnScore",
+            "operator": "gte",
+            "value": 2
+          },
+          {
+            "description": "Safety Score 至少 60。",
+            "key": "safetyScore",
+            "operator": "gte",
+            "value": 60
+          }
+        ],
+        "exitConditions": [
+          {
+            "description": "出现开发者抛售信号时立刻退出。",
+            "key": "hasDevSell",
+            "operator": "eq",
+            "value": true
+          }
+        ],
+        "rebalanceRules": [
+          {
+            "description": "价格反向穿越中枢 bin 过快时，通过 rebalance 收窄风险。",
+            "trigger": "rapid_reversion",
+            "action": "rebalance",
+            "threshold": 2
+          }
+        ]
+      },
+      "riskLimits": {
+        "maxPositionSizePercent": 1.5,
+        "maxTotalExposurePercent": 8,
+        "maxConcurrentPositions": 8,
+        "stopLossPercent": 18,
+        "maxAliveHours": 48,
+        "maxDailyRebalances": 8
+      },
+      "applicability": {
+        "minLincolnScore": 2,
+        "minSafetyScore": 60,
+        "minMcap": 800000,
+        "maxMcap": 30000000,
+        "lifecycleStages": [
+          "hype",
+          "plateau",
+          "decline"
+        ]
+      },
+      "changelog": "增强下跌场景下的防守能力。",
+      "previousVersion": "1.2.0",
+      "createdAt": "2026-03-28T00:00:00.000Z",
+      "updatedAt": "2026-03-28T00:00:00.000Z"
+    },
+    {
+      "id": "sniper",
+      "version": "3.0.0",
+      "name": "Sniper",
+      "description": "用于高热度、高 Lincoln、高安全分的新池，策略较激进，因此先灰度放量。",
+      "status": "canary",
+      "canaryPercent": 20,
+      "params": {
+        "direction": "below",
+        "distributionType": "Curve",
+        "binCount": 30,
+        "binStepPreference": [
+          60,
+          80
+        ],
+        "feeRatePreference": [
+          0.03,
+          0.05
+        ],
+        "entryConditions": [
+          {
+            "description": "Lincoln Score 至少 5.0。",
+            "key": "lincolnScore",
+            "operator": "gte",
+            "value": 5
+          },
+          {
+            "description": "Safety Score 至少 70。",
+            "key": "safetyScore",
+            "operator": "gte",
+            "value": 70
+          }
+        ],
+        "exitConditions": [
+          {
+            "description": "如果 hype 快速消退，则优先止盈/止损退出。",
+            "key": "lifecycleStage",
+            "operator": "eq",
+            "value": "decline"
+          }
+        ],
+        "rebalanceRules": [
+          {
+            "description": "允许较高频重平衡以追逐热点，但每日不超过上限。",
+            "trigger": "high_velocity",
+            "action": "rebalance",
+            "threshold": 3
+          }
+        ]
+      },
+      "riskLimits": {
+        "maxPositionSizePercent": 1,
+        "maxTotalExposurePercent": 5,
+        "maxConcurrentPositions": 5,
+        "stopLossPercent": 15,
+        "maxAliveHours": 24,
+        "maxDailyRebalances": 10
+      },
+      "applicability": {
+        "minLincolnScore": 5,
+        "minSafetyScore": 70,
+        "minMcap": 200000,
+        "maxMcap": 10000000,
+        "lifecycleStages": [
+          "birth",
+          "hype"
+        ]
+      },
+      "changelog": "v3.0 切换为 Curve 分布，并保留 20% 灰度。",
+      "previousVersion": "2.4.0",
+      "createdAt": "2026-03-28T00:00:00.000Z",
+      "updatedAt": "2026-03-28T00:00:00.000Z"
+    }
+  ],
+  "pendingActions": [],
+  "paperPositionSnapshots": [
+    {
+      "id": "paper-1778566763381-rjwuld",
+      "positionId": "position-1778566680306-vmt9k3",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "poolAddress": "Gqkre2NRV9TgQRBZ5XC43yGXr9CV346qJvHk178hQnQ6",
+      "tokenMint": "56hrCR3n7danhHNjWaU4VeUHpE1eRE9VRBWpHRPKpump",
+      "tokenSymbol": "AINL",
+      "timestamp": "2026-05-12T06:19:23.380Z",
+      "activeBinId": -18,
+      "valueSol": 338994.5706073942,
+      "valueUsd": 32641787.203786,
+      "pnlPercent": 93904213.18764383,
+      "feeAccruedSol": 338994.20965971303,
+      "unclaimedFeesSol": 338994.20965971303,
+      "inRange": false,
+      "source": "meteora_http",
+      "stale": false
+    },
+    {
+      "id": "paper-1778566763381-qobyxf",
+      "positionId": "position-1778566680318-5ntuks",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "poolAddress": "8gftUT5KZrs4w3CPBS14xb3J7KqKEmU744rxZANaNu6g",
+      "tokenMint": "7HgfXftRBBqsYtAEYcqjGLQrNJLL6Tww9ek4rE3Apump",
+      "tokenSymbol": "RKC",
+      "timestamp": "2026-05-12T06:19:23.380Z",
+      "activeBinId": -822,
+      "valueSol": 2537.8823651229486,
+      "valueUsd": 244372.692938,
+      "pnlPercent": 702914.5055742239,
+      "feeAccruedSol": 2537.5214174417893,
+      "unclaimedFeesSol": 2537.5214174417893,
+      "inRange": false,
+      "source": "meteora_http",
+      "stale": false
+    },
+    {
+      "id": "paper-1778566763381-8syydj",
+      "positionId": "position-1778566680337-41i0hr",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "poolAddress": "3JB73MgAyDiwvPWLQsUvRZo9LW3RvMQPHfeshYZVuk6M",
+      "tokenMint": "usemtUxHat32zmoyLicWbiLXxnYi2eoELbHGE6Nugpj",
+      "tokenSymbol": "USEM",
+      "timestamp": "2026-05-12T06:19:23.380Z",
+      "activeBinId": -4155,
+      "valueSol": 539.4454326465285,
+      "valueUsd": 51943.20071,
+      "pnlPercent": 149330.86776912145,
+      "feeAccruedSol": 539.084484965369,
+      "unclaimedFeesSol": 539.084484965369,
+      "inRange": false,
+      "source": "meteora_http",
+      "stale": false
+    },
+    {
+      "id": "paper-1778566763381-y18m97",
+      "positionId": "position-1778566680343-sqip27",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "poolAddress": "4mi42PFdCXkLnJKFJMJFijLAA1x3yf3JRncq2q3qdxXL",
+      "tokenMint": "7HgfXftRBBqsYtAEYcqjGLQrNJLL6Tww9ek4rE3Apump",
+      "tokenSymbol": "RKC",
+      "timestamp": "2026-05-12T06:19:23.380Z",
+      "activeBinId": -821,
+      "valueSol": 2117.644073912808,
+      "valueUsd": 203907.947877,
+      "pnlPercent": 586505.0066240465,
+      "feeAccruedSol": 2117.2831262316486,
+      "unclaimedFeesSol": 2117.2831262316486,
+      "inRange": false,
+      "source": "meteora_http",
+      "stale": false
+    },
+    {
+      "id": "paper-1778566763381-drckln",
+      "positionId": "position-1778566680357-74pe1c",
+      "skillId": "sawtooth",
+      "skillVersion": "1.3.0",
+      "poolAddress": "6m43PNgidB7NdUZZaCi5Lg8et8ccoXPMet5x6ju5qA5a",
+      "tokenMint": "Pren1FvFX6J3E4kXhJuCiAD5aDmGEb7qJRncwA8Lkhw",
+      "tokenSymbol": "ANTHROPIC",
+      "timestamp": "2026-05-12T06:19:23.380Z",
+      "activeBinId": 3418,
+      "valueSol": 820.7964181224495,
+      "valueUsd": 79034.487101,
+      "pnlPercent": 254016.5381184054,
+      "feeAccruedSol": 820.4734649340437,
+      "unclaimedFeesSol": 820.4734649340437,
+      "inRange": false,
+      "source": "meteora_http",
+      "stale": false
+    }
+  ]
+}

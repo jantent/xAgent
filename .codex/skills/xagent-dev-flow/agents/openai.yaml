@@ -1,0 +1,4 @@
+interface:
+  display_name: "xAgent Dev Flow"
+  short_description: "xAgent repository coding and validation workflow"
+  default_prompt: "Use $xagent-dev-flow to work in the xAgent repository and follow its validation workflow."

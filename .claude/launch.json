@@ -1,0 +1,34 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "xAgent (dev)",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["dist/index.js"],
+      "port": 8787
+    },
+    {
+      "name": "xAgent (once)",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["dist/index.js", "--once"],
+      "port": 8787
+    },
+    {
+      "name": "xAgent (no-api)",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["dist/index.js", "--no-api"]
+    },
+    {
+      "name": "xAgent (live-sdk)",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["dist/index.js", "--config", "config/agent.live-sdk.yaml"],
+      "port": 8787
+    },
+    {
+      "name": "xAgent (canary)",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["dist/index.js", "--config", "config/agent.canary.yaml"],
+      "port": 8787
+    }
+  ]
+}

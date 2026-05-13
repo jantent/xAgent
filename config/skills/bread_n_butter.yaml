@@ -1,0 +1,52 @@
+id: "bread_n_butter"
+version: "2.1.0"
+name: "Bread 'n Butter"
+description: "适用于已进入 Hype 或 Plateau 阶段的主流 meme 池，优先做单边 SOL below 策略。"
+status: "active"
+canaryPercent: 0
+params:
+  direction: "below"
+  distributionType: "Spot"
+  binCount: 69
+  binStepPreference: [80, 100]
+  feeRatePreference: [0.02, 0.05]
+  entryConditions:
+    - description: "Lincoln Score 至少达到 1.5，保证基础 fee/tvl 结构仍有吸引力。"
+      key: "lincolnScore"
+      operator: "gte"
+      value: 1.5
+    - description: "Safety Score 至少 50，避免把资金放进明显高危池。"
+      key: "safetyScore"
+      operator: "gte"
+      value: 50
+  exitConditions:
+    - description: "Lincoln Score 低于 1.0 时，说明收益结构衰减，应退出。"
+      key: "lincolnScore"
+      operator: "lt"
+      value: 1.0
+    - description: "当持仓亏损超过 20% 时直接退出。"
+      key: "pnlPercent"
+      operator: "lte"
+      value: -20
+  rebalanceRules:
+    - description: "仓位持续出界超过 5 分钟时触发重平衡。"
+      trigger: "out_of_range"
+      action: "rebalance"
+      threshold: 300000
+riskLimits:
+  maxPositionSizePercent: 2
+  maxTotalExposurePercent: 10
+  maxConcurrentPositions: 10
+  stopLossPercent: 20
+  maxAliveHours: 72
+  maxDailyRebalances: 6
+applicability:
+  minLincolnScore: 1.5
+  minSafetyScore: 50
+  minMcap: 500000
+  maxMcap: 50000000
+  lifecycleStages: ["hype", "plateau"]
+changelog: "初始版本，作为系统默认主策略。"
+previousVersion: ~
+createdAt: "2026-03-28T00:00:00.000Z"
+updatedAt: "2026-03-28T00:00:00.000Z"
