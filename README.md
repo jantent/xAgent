@@ -10,6 +10,7 @@
 - 风控、组合管理、执行层的可扩展实现
 - 文件审计日志与控制台通知
 - dry-run paper trading：用真实 Meteora 池子数据近似更新虚拟仓位 PnL
+- Telegram 只读控制面：手机端查看 Dashboard 链接、状态、仓位与审计事件
 
 当前版本默认会优先尝试真实 HTTP 数据源与 Meteora 池子发现接口；如果外部服务不可用，再自动回退到 `config/sample-pools.json` 和 mock provider，方便在没有真实 RPC、钱包和外部 API Key 的情况下先验证流程。
 默认 `execution.mode: dry_run` 不会真实下单；当 `paper_trading.enabled=true` 时，系统会在主循环中用真实 Meteora 池子的 active bin、价格与 fee/TVL 对虚拟仓位做近似估值。如果池子数据来自 mock fallback，paper trading 只写 stale 快照，不伪造收益。
@@ -135,6 +136,8 @@ Dashboard 当前覆盖：
 - 仓位矩阵：支持单仓强退
 - Skill 控制台：支持启用、停用、Canary 切换，并展示按版本聚合的仓位 / 胜率 / 费用 / paper 费用 / 估算盈亏 / 最大回撤，以及 dry-run Skill Optimizer 的只读参数建议
 - 主循环会按 `risk.fee_claim_interval_hours` 自动触发手续费检查/提取；当 `lincoln_exit_threshold` 命中时，会自动转为平仓动作
+
+Telegram bot 当前是只读控制面，和通知器共用 `TG_BOT_TOKEN`，默认只允许 `TG_CHAT_ID` 中列出的 chat 访问。线上建议配置 `XAGENT_DASHBOARD_URL=https://你的域名/dashboard`，bot 的 `/dashboard` 会发送页面链接；`/status`、`/positions [active|closed|all] [关键词]`、`/position <id|symbol|mint|pool>`、`/events [source] [关键词]` 用于手机端查看运行态、仓位和审计事件。`TG_CHAT_ID` 支持逗号或空白分隔多个 chat id，未授权用户只能通过 `/id` 查看自己的 chat id。
 
 示例：
 
@@ -331,9 +334,24 @@ HTTP provider 仍走统一的 HTTP 规范化层。配置里可以为 `provider_a
 - 单实例保护仍使用本地 lock 文件
 - `mirror_to_file=true` 时继续镜像写到本地文件，便于 grep / 备份 / 离线分析
 
+`storage.audit_retention` 控制审计保留策略：
+
+- `retention_days`：删除超过指定天数的审计事件。
+- `max_events_per_source`：每类 source 最多保留的事件数，SQLite 与 JSONL 都按 source 独立裁剪。
+- `cleanup_interval_ms`：常驻服务的清理间隔；启动时也会先尝试清理一次。
+
 无论 file / sqlite backend，`guardrails.persist_failure_strategy=close_only_then_pause` 都会在状态持久化连续失败时先切 `close_only`，再升级到 `emergency_paused`。
 
 表结构会在运行时自动创建，不需要手工执行 migration。
+
+从 file backend 切到 SQLite 时，先停服务并备份 `runtime/`，再执行：
+
+```bash
+npm run build
+npm run storage:migrate-sqlite -- --state runtime/state.json --audit-dir runtime/audit --db runtime/xagent.db --replace
+```
+
+该命令会把当前状态快照写入 `runtime_state_snapshots`，并把现有 JSONL 审计导入 `audit_events`。
 
 ## Wallet Secret Flow
 
@@ -377,7 +395,7 @@ src/utils/             通用工具
 - Skill Optimizer 第一版只在 `dry_run` + `paper_trading` 下生成只读建议，不会自动 apply、Canary、晋级或 rollback。
 - 当前持久化 backend 支持 file / SQLite；数据源缓存使用进程内 memory backend。
 - API 控制面在 loopback 地址上支持可选 Bearer Token 认证；如果监听到非 loopback 地址，则必须配置 `XAGENT_API_TOKEN`。设置后，除 `/health` 与静态 dashboard 资源外，其余接口都会要求 `Authorization: Bearer <token>`。
-- Telegram / Discord 通知器已经接好，但只有相关环境变量存在时才会启用。
+- Telegram / Discord 通知器已经接好；Telegram 还会在 `notifications.telegram.bot.enabled=true` 且存在 `TG_BOT_TOKEN` / `TG_CHAT_ID` 时启动只读 command bot。
 - 如果切到 `execution.mode=live_sdk`，需要至少提供真实 RPC、可用钱包 secret，以及可访问的 Jupiter endpoint；建议先用小额度仓位验证。
 - 如果切到 `config/agent.prod.yaml`，会额外启用 guardrails：禁止运行时 mock 数据源 / mock LLM、要求 live preflight 成功、使用 SQLite 作为状态主存储，并在 `live_sdk` 下对“链上已不存在”的本地 active 仓位做启动时安全收敛。
 - `live_sdk` 在 `submission_strategy` 包含 Jito 时，启动前会额外调用 block engine 的 `getTipAccounts` 做可达性检查；`live_gateway` 在配置了 `positions_path` 后，会校验 gateway 端活跃仓位和本地状态是否完全一致。

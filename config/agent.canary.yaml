@@ -97,6 +97,11 @@ storage:
   state_snapshot_path: "./runtime/state.json"
   audit_dir: "./runtime/audit"
   audit_query_limit: 30
+  audit_retention:
+    enabled: true
+    retention_days: 30
+    max_events_per_source: 500000
+    cleanup_interval_ms: 21600000
   mirror_to_file: true
   runtime_lock:
     enabled: true
@@ -175,6 +180,15 @@ notifications:
     bot_token_env: "TG_BOT_TOKEN"
     chat_id_env: "TG_CHAT_ID"
     levels: ["critical", "high", "medium"]
+    bot:
+      enabled: true
+      allowed_chat_ids_env: "TG_CHAT_ID"
+      dashboard_url_env: "XAGENT_DASHBOARD_URL"
+      poll_interval_ms: 2000
+      poll_timeout_seconds: 25
+      request_timeout_ms: 10000
+      max_positions: 8
+      max_events: 8
   discord:
     webhook_env: "DISCORD_WEBHOOK"
     levels: ["critical", "high", "low"]

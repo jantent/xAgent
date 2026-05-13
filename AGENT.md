@@ -20,10 +20,12 @@
 - GMGN 主数据源默认通过官方 `gmgn-cli` 读取结构化 OpenAPI 数据，不再抓取 `https://gmgn.ai` 网页接口；本地需要安装 `gmgn-cli` 并配置 `GMGN_API_KEY` 或 `~/.config/gmgn/.env`。
 - 真实 HTTP 数据源与真实池子发现都不是强依赖。外部依赖失败时，runtime 会退回 mock provider 或 `config/sample-pools.json`。
 - 额外提供 `config/agent.canary.yaml` 与 `config/agent.prod.yaml` 作为真钱运行配置：禁用运行时 mock、要求 live preflight、使用 SQLite 主存储，并默认启用单实例锁。
+- 审计事件支持 `storage.audit_retention` 定期清理，SQLite 与 JSONL 都按 source 裁剪旧事件/超量事件。
 - 当前 live preflight 不只检查 signer / RPC，也会检查主数据源、池子发现源、Jupiter / Jito / gateway 可达性，以及本地活跃仓位与 signer / 链上账户的一致性。
 - `guardrails.active_position_reconcile=repair` 时，`live_sdk` 启动前会先回放最近审计里的 `stateOperations`、恢复 pending 交易，再把链上仓位账户已不存在的本地 active 记录收敛为 closed。
 - `live_gateway` 若配置了 `execution.live.gateway.positions_path`，启动前会先按远端 active positions 镜像修复本地状态，然后再做一致性校验；如果本地已有 active 仓位但没有配置这个 path，preflight 会拒绝启动。
 - 控制面当前采用 `Hono + 内置 dashboard`，dashboard 优先消费实时状态流，轮询只作为兜底。
+- Telegram command bot 是只读控制面，复用运行时状态与审计 reader，只允许配置的 chat_id 查看状态、仓位、事件和 dashboard 链接，不承载撤仓/暂停等 mutating action。
 
 ## 技术栈与项目事实
 
@@ -124,6 +126,8 @@ npm run start -- --config config/agent.live-sdk.yaml
   内置 dashboard 页面，优先使用 SSE 订阅状态，失败时回退轮询 `/status`。
 - `src/services/`
   控制面与统计服务，如 skill stats、paper trading 和 control service。
+- `src/services/telegram-bot-service.ts`
+  Telegram 只读 command bot，负责 `/status`、`/dashboard`、`/positions`、`/position`、`/events` 等手机端查询。
 - `src/wallet/`
   钱包 secret 读取与解密。
 - `config/agent.yaml`
@@ -178,6 +182,7 @@ npm run start -- --config config/agent.live-sdk.yaml
 - API 默认监听 `127.0.0.1:8787`。
 - `XAGENT_API_TOKEN` 存在时，除 `/health` 和静态 dashboard 资源外，其余接口都需要 Bearer Token；如果 API 绑定到非 loopback 地址，则必须配置该 token。
 - `GET /events/status` 用于 dashboard 实时状态推送；开启 Bearer Token 时，该 SSE 路由允许 query token 访问，便于浏览器直接订阅。
+- `notifications.telegram.bot.enabled=true` 时，runtime 会启动 Telegram long polling；授权 chat 默认来自 `TG_CHAT_ID`，线上 dashboard 链接建议用 `XAGENT_DASHBOARD_URL` 显式配置。
 - 状态持久化支持 file / SQLite；数据源缓存当前使用 memory backend。
 - 钱包 secret 支持明文环境变量和加密文件两种来源；默认不向 gateway 透传 secret。
 - `SOL_PRICE_USD` 或 `valuation.sol_price_usd` 用于填充 `currentValueUsd`；未配置时系统会返回 `0`，不会再使用硬编码估值。

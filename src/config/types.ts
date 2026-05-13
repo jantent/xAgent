@@ -60,6 +60,17 @@ export interface NotificationRouteConfig {
   chat_id_env?: string;
   webhook_env?: string;
   levels: string[];
+  bot?: {
+    enabled?: boolean;
+    allowed_chat_ids_env?: string;
+    dashboard_url?: string;
+    dashboard_url_env?: string;
+    poll_interval_ms?: number;
+    poll_timeout_seconds?: number;
+    request_timeout_ms?: number;
+    max_positions?: number;
+    max_events?: number;
+  };
 }
 
 export interface ExecutionGatewayConfig {
@@ -98,6 +109,12 @@ export interface StorageConfig {
   state_snapshot_path?: string;
   audit_dir?: string;
   audit_query_limit?: number;
+  audit_retention?: {
+    enabled?: boolean;
+    retention_days?: number;
+    max_events_per_source?: number;
+    cleanup_interval_ms?: number;
+  };
   mirror_to_file?: boolean;
   runtime_lock?: {
     enabled?: boolean;

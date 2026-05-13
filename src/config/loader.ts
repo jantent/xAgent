@@ -200,6 +200,7 @@ function normalizeRoute(raw: RawRecord, context: string): LLMRouteConfig {
 
 function normalizeNotificationRoute(raw: RawRecord, context: string): NotificationRouteConfig {
   const levels = requireStringArray(raw, "levels", context);
+  const bot = optionalRecord(raw, "bot", context);
   for (const level of levels) {
     if (!ALERT_LEVELS.has(level)) {
       throw new Error(`${context}.levels 包含非法等级 ${level}`);
@@ -210,7 +211,20 @@ function normalizeNotificationRoute(raw: RawRecord, context: string): Notificati
     bot_token_env: optionalString(raw, "bot_token_env", context),
     chat_id_env: optionalString(raw, "chat_id_env", context),
     webhook_env: optionalString(raw, "webhook_env", context),
-    levels
+    levels,
+    bot: bot
+      ? {
+          enabled: optionalBoolean(bot, "enabled", `${context}.bot`),
+          allowed_chat_ids_env: optionalString(bot, "allowed_chat_ids_env", `${context}.bot`),
+          dashboard_url: optionalString(bot, "dashboard_url", `${context}.bot`),
+          dashboard_url_env: optionalString(bot, "dashboard_url_env", `${context}.bot`),
+          poll_interval_ms: optionalNumber(bot, "poll_interval_ms", `${context}.bot`),
+          poll_timeout_seconds: optionalNumber(bot, "poll_timeout_seconds", `${context}.bot`),
+          request_timeout_ms: optionalNumber(bot, "request_timeout_ms", `${context}.bot`),
+          max_positions: optionalNumber(bot, "max_positions", `${context}.bot`),
+          max_events: optionalNumber(bot, "max_events", `${context}.bot`)
+        }
+      : undefined
   };
 }
 
@@ -502,6 +516,14 @@ function normalizeAgentConfig(raw: RawRecord, context: string): AgentConfig {
           state_snapshot_path: optionalString(storage, "state_snapshot_path", `${context}.storage`),
           audit_dir: optionalString(storage, "audit_dir", `${context}.storage`),
           audit_query_limit: optionalNumber(storage, "audit_query_limit", `${context}.storage`),
+          audit_retention: optionalRecord(storage, "audit_retention", `${context}.storage`)
+            ? {
+                enabled: optionalBoolean(requireRecord(storage, "audit_retention", `${context}.storage`), "enabled", `${context}.storage.audit_retention`),
+                retention_days: optionalNumber(requireRecord(storage, "audit_retention", `${context}.storage`), "retention_days", `${context}.storage.audit_retention`),
+                max_events_per_source: optionalNumber(requireRecord(storage, "audit_retention", `${context}.storage`), "max_events_per_source", `${context}.storage.audit_retention`),
+                cleanup_interval_ms: optionalNumber(requireRecord(storage, "audit_retention", `${context}.storage`), "cleanup_interval_ms", `${context}.storage.audit_retention`)
+              }
+            : undefined,
           mirror_to_file: optionalBoolean(storage, "mirror_to_file", `${context}.storage`),
           runtime_lock: optionalRecord(storage, "runtime_lock", `${context}.storage`)
             ? {

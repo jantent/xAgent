@@ -1024,6 +1024,48 @@ tbody tr:last-child td {
   line-height: 1.5;
 }
 
+.token-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(2 6 23 / 0.72);
+}
+
+.token-prompt {
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+  padding: 20px;
+}
+
+.token-prompt h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.token-prompt p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.token-prompt input {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.token-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -2201,7 +2243,7 @@ async function ensureAuthToken(forcePrompt) {
     return;
   }
 
-  const entered = window.prompt("输入 xAgent API Token", dashboardState.authToken || "");
+  const entered = await requestAuthToken();
   if (entered === null) {
     throw new Error("缺少 API Token，无法访问受保护控制面。");
   }
@@ -2214,6 +2256,63 @@ async function ensureAuthToken(forcePrompt) {
   }
 
   connectStatusStream();
+}
+
+function requestAuthToken() {
+  return new Promise(function (resolve) {
+    const existing = byId("token-prompt-backdrop");
+    if (existing) {
+      existing.remove();
+    }
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "token-prompt-backdrop";
+    backdrop.className = "token-prompt-backdrop";
+    backdrop.innerHTML =
+      '<div class="token-prompt" role="dialog" aria-modal="true" aria-labelledby="token-prompt-title">' +
+      '<h2 id="token-prompt-title">输入 xAgent API Token</h2>' +
+      '<p>控制面已启用 Bearer Token。Token 只会保存在当前浏览器会话。</p>' +
+      '<input id="token-prompt-input" type="password" autocomplete="off" placeholder="xAgent API Token" />' +
+      '<div class="token-prompt-actions">' +
+      '<button type="button" id="token-prompt-cancel" class="ghost">取消</button>' +
+      '<button type="button" id="token-prompt-submit">确认</button>' +
+      "</div>" +
+      "</div>";
+
+    document.body.appendChild(backdrop);
+
+    const input = byId("token-prompt-input");
+    const submit = byId("token-prompt-submit");
+    const cancel = byId("token-prompt-cancel");
+
+    if (input && "value" in input) {
+      input.value = dashboardState.authToken || "";
+      input.focus();
+      input.select();
+    }
+
+    const close = function (value) {
+      backdrop.remove();
+      resolve(value);
+    };
+
+    submit?.addEventListener("click", function () {
+      close(input && "value" in input ? String(input.value ?? "") : "");
+    });
+
+    cancel?.addEventListener("click", function () {
+      close(null);
+    });
+
+    backdrop.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        close(input && "value" in input ? String(input.value ?? "") : "");
+      }
+      if (event.key === "Escape") {
+        close(null);
+      }
+    });
+  });
 }
 
 async function apiRequest(url, options) {

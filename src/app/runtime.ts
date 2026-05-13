@@ -3,6 +3,7 @@ import path from "node:path";
 import { Connection, PublicKey } from "@solana/web3.js";
 
 import type { IAuditReader } from "../audit/contracts.js";
+import { AuditRetentionService } from "../audit/audit-retention-service.js";
 import { CompositeAuditLogger } from "../audit/composite-audit-logger.js";
 import { FileAuditReader } from "../audit/file-audit-reader.js";
 import { FileAuditLogger } from "../audit/file-audit-logger.js";
@@ -51,6 +52,7 @@ import { MockMeteoraPoolSource } from "../providers/pools/mock-meteora-pool-sour
 import { SkillStatsService } from "../services/skill-stats-service.js";
 import { SkillOptimizerService } from "../services/skill-optimizer-service.js";
 import { PaperTradingService } from "../services/paper-trading-service.js";
+import { TelegramBotService } from "../services/telegram-bot-service.js";
 import { rootLogger } from "../utils/logger.js";
 import type { LoadedWalletSecret } from "../wallet/wallet-secret-manager.js";
 import { WalletSecretManager } from "../wallet/wallet-secret-manager.js";
@@ -99,6 +101,7 @@ export interface AppRuntime {
   metricsService: MetricsService;
   executionLayer: ExecutionLayer;
   paperTradingService: PaperTradingService;
+  telegramBot: TelegramBotService | null;
   auditReader: IAuditReader;
   orchestrator: Orchestrator;
   shutdown(): Promise<void>;
@@ -112,8 +115,9 @@ function createNotifier(config: AgentConfig): CompositeNotifier {
   if (telegramConfig?.bot_token_env && telegramConfig.chat_id_env) {
     const botToken = process.env[telegramConfig.bot_token_env];
     const chatId = process.env[telegramConfig.chat_id_env];
-    if (botToken && chatId) {
-      notifiers.push(new TelegramNotifier(botToken, chatId, telegramConfig, logger.child("telegram")));
+    const chatIds = parseTelegramChatIds(chatId);
+    if (botToken && chatIds.length > 0) {
+      notifiers.push(new TelegramNotifier(botToken, chatIds, telegramConfig, logger.child("telegram")));
     } else {
       logger.warn("Telegram notifier 未启用，缺少环境变量", {
         botTokenEnv: telegramConfig.bot_token_env,
@@ -135,6 +139,52 @@ function createNotifier(config: AgentConfig): CompositeNotifier {
   }
 
   return new CompositeNotifier(notifiers, logger.child("fanout"));
+}
+
+function parseTelegramChatIds(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function createTelegramBotService(config: AgentConfig, runtime: AppRuntime): TelegramBotService | null {
+  const telegramConfig = config.notifications.telegram;
+  const botConfig = telegramConfig?.bot;
+  if (!telegramConfig || botConfig?.enabled !== true) {
+    return null;
+  }
+
+  const logger = rootLogger.child("telegram_bot");
+  const botToken = telegramConfig.bot_token_env ? process.env[telegramConfig.bot_token_env] : undefined;
+  if (!botToken) {
+    logger.warn("Telegram bot 未启用，缺少 bot token 环境变量", {
+      botTokenEnv: telegramConfig.bot_token_env
+    });
+    return null;
+  }
+
+  const allowedChatIdsEnv = botConfig.allowed_chat_ids_env ?? telegramConfig.chat_id_env;
+  const allowedChatIds = parseTelegramChatIds(allowedChatIdsEnv ? process.env[allowedChatIdsEnv] : undefined);
+  if (allowedChatIds.length === 0) {
+    logger.warn("Telegram bot 未启用，缺少授权 chat_id 环境变量", {
+      allowedChatIdsEnv
+    });
+    return null;
+  }
+
+  return new TelegramBotService(runtime, {
+    botToken,
+    allowedChatIds,
+    dashboardUrl: resolveConfiguredUrl(botConfig.dashboard_url, botConfig.dashboard_url_env),
+    apiAuthEnabled: Boolean(config.api?.auth?.bearer_token_env && process.env[config.api.auth.bearer_token_env]),
+    pollIntervalMs: botConfig.poll_interval_ms ?? 2_000,
+    pollTimeoutSeconds: botConfig.poll_timeout_seconds ?? 25,
+    requestTimeoutMs: botConfig.request_timeout_ms ?? 10_000,
+    maxPositions: botConfig.max_positions ?? 8,
+    maxEvents: botConfig.max_events ?? 8,
+    logger
+  });
 }
 
 function createExecutionLayer(
@@ -452,6 +502,18 @@ export async function buildRuntime(options: RuntimeBootstrapOptions): Promise<Ap
     auditDir,
     sqliteHandle
   });
+  const auditRetentionService = new AuditRetentionService({
+    policy: {
+      enabled: config.storage?.audit_retention?.enabled,
+      retentionDays: config.storage?.audit_retention?.retention_days,
+      maxEventsPerSource: config.storage?.audit_retention?.max_events_per_source,
+      cleanupIntervalMs: config.storage?.audit_retention?.cleanup_interval_ms
+    },
+    auditDir,
+    cleanFileAudit: config.storage?.backend !== "sqlite" || config.storage?.mirror_to_file !== false,
+    sqliteHandle,
+    logger: rootLogger.child("audit_retention")
+  });
   const guardrails = resolveRuntimeGuardrails(config);
   let runtimeLock: RuntimeLockLease | null = null;
 
@@ -473,6 +535,7 @@ export async function buildRuntime(options: RuntimeBootstrapOptions): Promise<Ap
     }
 
     const { auditLogger, auditReader } = auditInfrastructure;
+    auditRetentionService.start();
     const llmManager = new LLMManager(config.llm, auditLogger, rootLogger.child("llm"), {
       allowMockProvider: guardrails.allow_mock_llm
     });
@@ -678,9 +741,12 @@ export async function buildRuntime(options: RuntimeBootstrapOptions): Promise<Ap
     metricsService,
     executionLayer,
     paperTradingService,
+    telegramBot: null,
     auditReader,
     orchestrator,
     shutdown: async () => {
+      await runtime.telegramBot?.stop();
+      auditRetentionService.stop();
       await stateStore.close?.();
       await cacheStore.close?.();
       await auditInfrastructure.close();
@@ -688,6 +754,8 @@ export async function buildRuntime(options: RuntimeBootstrapOptions): Promise<Ap
       await runtimeLock?.release();
     }
     };
+
+    runtime.telegramBot = createTelegramBotService(config, runtime);
 
     await reconcileStartupState(config, {
       walletSecret,
@@ -734,6 +802,7 @@ export async function buildRuntime(options: RuntimeBootstrapOptions): Promise<Ap
     await stateStore.close?.().catch(() => undefined);
     await cacheStore.close?.().catch(() => undefined);
     await auditInfrastructure.close().catch(() => undefined);
+    auditRetentionService.stop();
     throw error;
   }
 }

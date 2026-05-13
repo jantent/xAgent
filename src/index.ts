@@ -48,12 +48,17 @@ async function main(): Promise<void> {
   let server: Awaited<ReturnType<typeof startApiServer>> | undefined;
   const apiEnabled = runtime.config.api?.enabled !== false && !args.noApi;
   if (apiEnabled) {
+    const apiHost = process.env.API_HOST ?? runtime.config.api?.host ?? "127.0.0.1";
+    const apiPort = Number(process.env.PORT ?? runtime.config.api?.port ?? 8787);
     server = await startApiServer(runtime, {
-      host: process.env.API_HOST ?? runtime.config.api?.host ?? "127.0.0.1",
-      port: Number(process.env.PORT ?? runtime.config.api?.port ?? 8787)
+      host: apiHost,
+      port: apiPort
     });
+    const dashboardHost = apiHost === "0.0.0.0" || apiHost === "::" ? "127.0.0.1" : apiHost;
+    runtime.telegramBot?.setRuntimeDashboardUrl(`http://${dashboardHost}:${apiPort}/dashboard`);
   }
 
+  runtime.telegramBot?.start();
   await runtime.orchestrator.start();
 
   const shutdown = (signal: string): void => {

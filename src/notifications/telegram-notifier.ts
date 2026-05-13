@@ -6,7 +6,7 @@ import type { Logger } from "../utils/logger.js";
 export class TelegramNotifier implements INotifier {
   constructor(
     private readonly botToken: string,
-    private readonly chatId: string,
+    private readonly chatIds: string[],
     private readonly config: NotificationRouteConfig,
     private readonly logger: Logger
   ) {}
@@ -54,6 +54,10 @@ export class TelegramNotifier implements INotifier {
   }
 
   private async sendMessage(text: string): Promise<void> {
+    await Promise.all(this.chatIds.map((chatId) => this.sendMessageToChat(chatId, text)));
+  }
+
+  private async sendMessageToChat(chatId: string, text: string): Promise<void> {
     const endpoint = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
     const response = await fetch(endpoint, {
       method: "POST",
@@ -61,7 +65,7 @@ export class TelegramNotifier implements INotifier {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        chat_id: this.chatId,
+        chat_id: chatId,
         text,
         disable_web_page_preview: true
       })
@@ -71,6 +75,7 @@ export class TelegramNotifier implements INotifier {
       const errorBody = await response.text();
       const error = new Error(`Telegram 通知发送失败: ${response.status} ${errorBody}`);
       this.logger.warn("Telegram 通知发送失败", {
+        chatId,
         status: response.status,
         errorBody
       });

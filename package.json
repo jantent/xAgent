@@ -12,6 +12,7 @@
     "start": "node dist/index.js",
     "start:once": "node dist/index.js --once",
     "start:no-api": "node dist/index.js --no-api",
+    "storage:migrate-sqlite": "node dist/tools/migrate-runtime-to-sqlite.js",
     "wallet:secret": "node dist/tools/wallet-secret.js"
   },
   "dependencies": {

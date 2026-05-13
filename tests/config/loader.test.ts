@@ -112,3 +112,49 @@ test("loadAgentConfig 会解析 gmgn_cli data provider 配置", async () => {
     await rm(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("loadAgentConfig 会解析 Telegram bot 控制面配置", async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "xagent-config-"));
+  try {
+    const configPath = path.join(tmpDir, "agent.yaml");
+    const config = createAgentConfig();
+    await writeFile(configPath, JSON.stringify(config));
+
+    const loaded = await loadAgentConfig(configPath);
+    assert.equal(loaded.notifications.telegram?.bot?.enabled, true);
+    assert.equal(loaded.notifications.telegram?.bot?.allowed_chat_ids_env, "TG_CHAT_ID");
+    assert.equal(loaded.notifications.telegram?.bot?.dashboard_url_env, "XAGENT_DASHBOARD_URL");
+    assert.equal(loaded.notifications.telegram?.bot?.max_positions, 8);
+    assert.equal(loaded.notifications.telegram?.bot?.max_events, 8);
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("loadAgentConfig 会解析审计保留策略", async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "xagent-config-"));
+  try {
+    const configPath = path.join(tmpDir, "agent.yaml");
+    const config = createAgentConfig();
+    config.storage = {
+      ...config.storage,
+      audit_retention: {
+        enabled: true,
+        retention_days: 14,
+        max_events_per_source: 100_000,
+        cleanup_interval_ms: 3_600_000
+      }
+    };
+    await writeFile(configPath, JSON.stringify(config));
+
+    const loaded = await loadAgentConfig(configPath);
+    assert.deepEqual(loaded.storage?.audit_retention, {
+      enabled: true,
+      retention_days: 14,
+      max_events_per_source: 100_000,
+      cleanup_interval_ms: 3_600_000
+    });
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});

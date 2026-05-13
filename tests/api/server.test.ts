@@ -251,6 +251,7 @@ function createRuntimeStub(options: RuntimeStubOptions = {}): AppRuntime {
         };
       }
     } as never,
+    telegramBot: null,
     auditReader: {
       async readRecent(limit = 30) {
         return auditEvents.slice(0, limit);

@@ -45,6 +45,7 @@ providers/ (数据源/LLM/池子发现) → managers/ (协调) → modules/ (决
 - `src/index.ts` — CLI 入口，解析 `--once`/`--no-api`/`--config`/`--skills`
 - `src/app/runtime.ts` — 运行时装配中心，接线所有 backend/provider/持久化/通知
 - `src/core/shared-state.ts` — 共享状态中心（仓位、资金、Skill 快照）
+- `src/services/telegram-bot-service.ts` — Telegram 只读 command bot（Dashboard 链接、状态、仓位、事件）
 - `src/config/types.ts` — 配置类型定义
 - `src/orchestration/orchestrator.ts` — 主循环 (30min) + 高频 tick (5-10s) 编排
 
@@ -85,4 +86,6 @@ providers/ (数据源/LLM/池子发现) → managers/ (协调) → modules/ (决
 
 默认配置 `config/agent.yaml`（dry_run），Skill 定义在 `config/skills/*.yaml`。
 API 默认 `127.0.0.1:8787`，`XAGENT_API_TOKEN` 控制认证。
+Telegram bot 默认只读，使用 `TG_BOT_TOKEN` + `TG_CHAT_ID` 授权，可通过 `XAGENT_DASHBOARD_URL` 返回公网 Dashboard 链接。
 状态持久化支持 file/SQLite，数据源缓存当前使用 memory backend。
+审计事件支持 `storage.audit_retention` 定期清理，SQLite 与 JSONL 都按 source 裁剪旧事件/超量事件。
