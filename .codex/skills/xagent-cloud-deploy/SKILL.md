@@ -11,6 +11,7 @@ Use this skill only for this repository. It covers first deployment or redeploym
 
 Default deployment layout:
 
+- current SSH target: `xagent-vps` (`root@43.247.132.62`, public-key auth, `IPQoS none`)
 - app dir: `/opt/xagent`
 - env file: `/etc/xagent/xagent.env`
 - runtime dir: `/opt/xagent/runtime`
@@ -20,7 +21,7 @@ Default deployment layout:
 - config: `config/agent.yaml`
 - dashboard access: SSH tunnel, not public Internet
 
-Use the host/user/port/auth method provided in the thread. Do not assume a password, key, or cloud provider.
+For this repository's current cloud deployment, prefer the local SSH alias `xagent-vps`. It is configured for root public-key login and `IPQoS none`; do not ask the user for the server password unless the alias/key path is proven unavailable. If the user provides a different host/user/port, use that thread-provided target instead. Do not assume any cloud provider.
 
 ## Safety Rules
 
@@ -46,6 +47,7 @@ Use the host/user/port/auth method provided in the thread. Do not assume a passw
    - if deploying current edits, tell the user what local modified files will be included.
 
 3. Inspect remote host:
+   - For the current deployment, run remote checks through `ssh xagent-vps '...'`.
    - `uname -a`
    - `cat /etc/os-release`
    - `command -v node npm git systemctl curl rsync`
@@ -113,8 +115,8 @@ rsync -az --delete \
   --exclude .env \
   --exclude '.env.*' \
   --exclude 'config/wallet.enc.json' \
-  -e 'ssh -o StrictHostKeyChecking=accept-new' \
-  ./ root@HOST:/opt/xagent/
+  -e ssh \
+  ./ xagent-vps:/opt/xagent/
 ```
 
 Use `-n --itemize-changes` first when redeploying an existing server:
@@ -130,9 +132,11 @@ rsync -azn --delete --itemize-changes \
   --exclude .env \
   --exclude '.env.*' \
   --exclude 'config/wallet.enc.json' \
-  -e 'ssh -o StrictHostKeyChecking=accept-new' \
-  ./ root@HOST:/opt/xagent/
+  -e ssh \
+  ./ xagent-vps:/opt/xagent/
 ```
+
+For a one-off non-default host, replace `xagent-vps:/opt/xagent/` with `root@HOST:/opt/xagent/` and add any needed SSH options explicitly.
 
 After sync:
 
@@ -205,11 +209,9 @@ Expected smoke result:
 If `xagent.service` is already active, do not run `start:once` concurrently because the running service already holds the runtime lock. For redeploy/update of an existing server:
 
 ```bash
-systemctl is-active xagent.service
-cd /opt/xagent
-npm run check
-npm run build
-systemctl restart xagent.service
+ssh xagent-vps 'systemctl is-active xagent.service'
+ssh xagent-vps 'cd /opt/xagent && npm run check && npm run build'
+ssh xagent-vps 'systemctl restart xagent.service'
 ```
 
 Then use the post-deploy verification below.
@@ -287,7 +289,7 @@ When all real keys are configured:
 Give the user this command:
 
 ```bash
-ssh -L 8787:127.0.0.1:8787 root@HOST
+ssh -L 8787:127.0.0.1:8787 xagent-vps
 ```
 
 Then open:

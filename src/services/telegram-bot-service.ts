@@ -107,10 +107,29 @@ function positionAgeHours(position: PositionRecord, now = Date.now()): number {
   return Math.max(0, (now - position.openedAt.getTime()) / 3_600_000);
 }
 
+function formatPositionRef(position: PositionRecord): string {
+  const segments = position.id.split("-");
+  const suffix = segments[segments.length - 1];
+  return suffix && suffix.length >= 4 ? suffix : position.id.slice(-8);
+}
+
+function formatSkillLabel(skillId: string): string {
+  return skillId.replaceAll("_", " ");
+}
+
+function formatRange(position: PositionRecord): string {
+  return `bin ${position.fromBinId}..${position.toBinId}`;
+}
+
+function formatRangeStatus(position: PositionRecord): string {
+  return position.isInRange ? "区间内" : "区间外";
+}
+
 function matchesPosition(position: PositionRecord, query: string): boolean {
   const normalized = query.toLowerCase();
   return [
     position.id,
+    formatPositionRef(position),
     position.positionPubkey,
     position.poolAddress,
     position.tokenMint,
@@ -421,15 +440,21 @@ export class TelegramBotService {
     const limit = Math.max(1, this.options.maxPositions);
     const lines = filtered.slice(0, limit).map((position, index) => {
       return [
-        `${index + 1}. ${position.tokenSymbol} ${formatSignedPercent(position.pnlPercent)} ${formatNumber(position.depositedSol, 4)} SOL`,
-        `   id=${position.id} status=${position.status} skill=${position.skillId}`,
-        `   range=${position.fromBinId}-${position.toBinId} in_range=${position.isInRange ? "yes" : "no"} age=${formatNumber(positionAgeHours(position), 1)}h`
+        `${index + 1}. ${position.tokenSymbol} | PnL ${formatSignedPercent(position.pnlPercent)} | ${formatNumber(position.depositedSol, 4)} SOL | ${formatNumber(positionAgeHours(position), 1)}h`,
+        `   ${formatRangeStatus(position)} | ${formatRange(position)} | ${formatSkillLabel(position.skillId)} | ref ${formatPositionRef(position)}`
       ].join("\n");
     });
+    const statusLabel = status === "active" || (!status && !showAll) ? "活跃仓位" : showAll ? "全部仓位" : `${status} 仓位`;
+    const summary = [
+      `${filtered.length} matched`,
+      `${Math.min(filtered.length, limit)} showing`,
+      `${allPositions.filter((position) => position.status === "active").length} active`,
+      `${allPositions.length} total`
+    ].join(" / ");
 
     return compactLines([
-      `[xAgent] 仓位 ${status ?? (showAll ? "all" : "active")}${query ? ` q=${query}` : ""}`,
-      `matched=${filtered.length} showing=${Math.min(filtered.length, limit)} total=${allPositions.length}`,
+      `[xAgent] ${statusLabel}${query ? ` · ${query}` : ""}`,
+      summary,
       lines.length > 0 ? lines.join("\n") : "没有匹配仓位。"
     ]);
   }
@@ -451,23 +476,23 @@ export class TelegramBotService {
 
     return compactLines([
       `[xAgent] 仓位详情 ${position.tokenSymbol}`,
-      `id=${position.id}`,
-      `status=${position.status} in_range=${position.isInRange ? "yes" : "no"}`,
-      `pnl=${formatSignedPercent(position.pnlPercent)} value_usd=${formatNumber(position.currentValueUsd, 2)} deposit=${formatNumber(position.depositedSol, 4)} SOL`,
-      `fees_claimed=${formatNumber(position.totalFeesClaimedSol, 4)} SOL rebalance=${position.rebalanceCount}`,
-      `skill=${position.skillId}@${position.skillVersion} direction=${position.direction}`,
-      `range=${position.fromBinId}-${position.toBinId}`,
-      `pool=${position.poolAddress}`,
-      `mint=${position.tokenMint}`,
-      `position_pubkey=${position.positionPubkey}`,
-      `opened=${formatDate(position.openedAt)}`,
-      `max_alive_until=${formatDate(position.maxAliveUntil)}`,
-      position.closedAt ? `closed=${formatDate(position.closedAt)}` : undefined,
-      position.outOfRangeSince ? `out_of_range_since=${formatDate(position.outOfRangeSince)}` : undefined,
+      `状态 ${position.status} | ${formatRangeStatus(position)} | PnL ${formatSignedPercent(position.pnlPercent)}`,
+      `资金 ${formatNumber(position.depositedSol, 4)} SOL | 估值 $${formatNumber(position.currentValueUsd, 2)} | 手续费 ${formatNumber(position.totalFeesClaimedSol, 4)} SOL`,
+      `策略 ${formatSkillLabel(position.skillId)}@${position.skillVersion} | ${position.direction}`,
+      `${formatRange(position)} | 已重平衡 ${position.rebalanceCount} 次`,
+      `开仓 ${formatDate(position.openedAt)}`,
+      `最长持有到 ${formatDate(position.maxAliveUntil)}`,
+      position.closedAt ? `平仓 ${formatDate(position.closedAt)}` : undefined,
+      position.outOfRangeSince ? `出界开始 ${formatDate(position.outOfRangeSince)}` : undefined,
       position.paper
-        ? `paper_value=${formatNumber(position.paper.currentValueSol, 4)} SOL unclaimed=${formatNumber(position.paper.unclaimedFeesSol, 4)} SOL source=${position.paper.lastSource ?? "n/a"}`
+        ? `Paper ${formatNumber(position.paper.currentValueSol, 4)} SOL | 未领 ${formatNumber(position.paper.unclaimedFeesSol, 4)} SOL | ${position.paper.lastSource ?? "n/a"}`
         : undefined,
-      position.narrative ? `narrative=${position.narrative}` : undefined
+      position.narrative ? `叙事 ${position.narrative}` : undefined,
+      `短码 ${formatPositionRef(position)}`,
+      `内部ID ${position.id}`,
+      `Pool ${position.poolAddress}`,
+      `Mint ${position.tokenMint}`,
+      `Position ${position.positionPubkey}`
     ]);
   }
 

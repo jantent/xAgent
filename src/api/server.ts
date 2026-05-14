@@ -8,7 +8,7 @@ import type { AppRuntime } from "../app/runtime.js";
 import { DASHBOARD_CONTENT_TYPE, DASHBOARD_SCRIPT, DASHBOARD_STYLES, renderDashboardPage } from "../dashboard/page.js";
 import { ControlService } from "../services/control-service.js";
 import { rootLogger } from "../utils/logger.js";
-import type { PositionRecord, PositionStatus } from "../domain/models.js";
+import type { ActionType, PositionRecord, PositionStatus } from "../domain/models.js";
 
 interface ApiServerOptions {
   host: string;
@@ -71,6 +71,8 @@ async function tryReadJsonBody(request: Request): Promise<Record<string, unknown
 const AUDIT_SOURCES = new Set(["actions", "errors", "phases", "cycles", "llm"]);
 const POSITION_STATUSES = new Set<PositionStatus>(["active", "closed", "closing", "error"]);
 const POSITION_SORT_KEYS = new Set(["openedAt", "closedAt", "pnlPercent", "currentValueUsd", "depositedSol", "fees"]);
+const TRADE_ACTION_TYPES = new Set(["open", "close", "rebalance", "claim", "noop", "emergency_exit"]);
+const TRADE_STATUSES = new Set(["success", "failed", "skipped"]);
 
 function parseLimit(value: string | undefined, fallback: number, max: number): number {
   const requested = Number(value);
@@ -98,6 +100,20 @@ function normalizeIsoQuery(value: string | undefined): string | undefined {
 
   const timestamp = new Date(normalized);
   return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+}
+
+function parseReportDays(value: string | undefined): number {
+  const requested = Number(value);
+  return requested === 30 || requested === 90 ? requested : 7;
+}
+
+function parseTimezoneOffsetMinutes(value: string | undefined): number {
+  const requested = Number(value);
+  if (!Number.isFinite(requested)) {
+    return 0;
+  }
+
+  return Math.max(-840, Math.min(840, Math.trunc(requested)));
 }
 
 function buildPage(limit: number, offset: number, resultCount: number) {
@@ -412,6 +428,34 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
     return context.json(queryPositions(runtime.state.getAllPositions(), context.req.raw));
   });
 
+  app.get("/trades", async (context) => {
+    const unauthorized = requireApiAuth(context);
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    const actionType = normalizeQueryText(context.req.query("actionType"));
+    if (actionType && !TRADE_ACTION_TYPES.has(actionType)) {
+      return context.json({ error: "unsupported trade actionType" }, 400);
+    }
+    const status = normalizeQueryText(context.req.query("status"));
+    if (status && !TRADE_STATUSES.has(status)) {
+      return context.json({ error: "unsupported trade status" }, 400);
+    }
+
+    return context.json(
+      await controlService.getTradeHistory({
+        limit: parseLimit(context.req.query("limit"), 50, 200),
+        offset: parseOffset(context.req.query("offset")),
+        actionType: actionType as ActionType | undefined,
+        status: status as "success" | "failed" | "skipped" | undefined,
+        token: normalizeQueryText(context.req.query("token")),
+        since: normalizeIsoQuery(context.req.query("since")),
+        until: normalizeIsoQuery(context.req.query("until"))
+      })
+    );
+  });
+
   app.get("/paper-trading/snapshots", async (context) => {
     const unauthorized = requireApiAuth(context);
     if (unauthorized) {
@@ -430,6 +474,20 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
         limit
       })
     });
+  });
+
+  app.get("/portfolio/report", async (context) => {
+    const unauthorized = requireApiAuth(context);
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    return context.json(
+      await controlService.getPortfolioReport({
+        days: parseReportDays(context.req.query("days")),
+        timezoneOffsetMinutes: parseTimezoneOffsetMinutes(context.req.query("timezoneOffsetMinutes"))
+      })
+    );
   });
 
   app.post("/control/pause", async (context) => {

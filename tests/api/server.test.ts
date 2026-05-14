@@ -4,6 +4,7 @@ import test from "node:test";
 import type { AppRuntime } from "../../src/app/runtime.js";
 import { createApiApp, startApiServer } from "../../src/api/server.js";
 import type { AuditEventQuery, AuditEventRecord } from "../../src/audit/contracts.js";
+import type { PaperPositionSnapshot } from "../../src/domain/models.js";
 import { SystemMode } from "../../src/domain/models.js";
 import { createAgentConfig, createPositionRecord, createSkill } from "../helpers/factories.js";
 
@@ -38,6 +39,11 @@ interface RuntimeStubOptions {
   calls?: string[];
   positions?: ReturnType<typeof createPositionRecord>[];
   auditEvents?: AuditEventRecord[];
+  paperSnapshots?: PaperPositionSnapshot[];
+}
+
+function assertApprox(actual: number, expected: number, tolerance = 1e-9): void {
+  assert.ok(Math.abs(actual - expected) <= tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
 }
 
 function createRuntimeStub(options: RuntimeStubOptions = {}): AppRuntime {
@@ -59,6 +65,27 @@ function createRuntimeStub(options: RuntimeStubOptions = {}): AppRuntime {
       reason: "样本不足。"
     }
   ];
+  const paperPositionSnapshots = options.paperSnapshots ?? [
+    {
+      id: "paper-1",
+      positionId: activePosition.id,
+      skillId: activePosition.skillId,
+      skillVersion: activePosition.skillVersion,
+      poolAddress: activePosition.poolAddress,
+      tokenMint: activePosition.tokenMint,
+      tokenSymbol: activePosition.tokenSymbol,
+      timestamp: new Date("2026-01-01T00:01:00.000Z"),
+      activeBinId: 8_000,
+      valueSol: 1.2,
+      valueUsd: 180,
+      pnlPercent: 0,
+      feeAccruedSol: 0,
+      unclaimedFeesSol: 0,
+      inRange: true,
+      source: "meteora_http",
+      stale: false
+    }
+  ];
   const snapshot = {
     startedAt: new Date("2026-01-01T00:00:00.000Z"),
     manualPause: false,
@@ -71,27 +98,7 @@ function createRuntimeStub(options: RuntimeStubOptions = {}): AppRuntime {
     lastHighFreqTickAt: undefined,
     lastCycleResult: undefined,
     pendingActions: [],
-    paperPositionSnapshots: [
-      {
-        id: "paper-1",
-        positionId: activePosition.id,
-        skillId: activePosition.skillId,
-        skillVersion: activePosition.skillVersion,
-        poolAddress: activePosition.poolAddress,
-        tokenMint: activePosition.tokenMint,
-        tokenSymbol: activePosition.tokenSymbol,
-        timestamp: new Date("2026-01-01T00:01:00.000Z"),
-        activeBinId: 8_000,
-        valueSol: 1.2,
-        valueUsd: 180,
-        pnlPercent: 0,
-        feeAccruedSol: 0,
-        unclaimedFeesSol: 0,
-        inRange: true,
-        source: "meteora_http",
-        stale: false
-      }
-    ]
+    paperPositionSnapshots
   };
 
   return {
@@ -345,6 +352,199 @@ test("GET /paper-trading/snapshots 返回 paper snapshots", async () => {
   const payload = await response.json();
   assert.equal(payload.snapshots.length, 1);
   assert.equal(payload.snapshots[0].positionId, "position-1");
+});
+
+test("GET /status 返回组合权益和 24h mark 变化", async () => {
+  const position = createPositionRecord({
+    currentValueUsd: 110,
+    depositedSol: 1,
+    totalFeesClaimedSol: 0.05,
+    paper: {
+      currentValueSol: 1.1,
+      unclaimedFeesSol: 0,
+      lastValuationAt: new Date("2026-01-01T00:02:00.000Z")
+    }
+  });
+  const runtime = createRuntimeStub({
+    positions: [position],
+    paperSnapshots: [
+      {
+        id: "paper-recent",
+        positionId: position.id,
+        skillId: position.skillId,
+        skillVersion: position.skillVersion,
+        poolAddress: position.poolAddress,
+        tokenMint: position.tokenMint,
+        tokenSymbol: position.tokenSymbol,
+        timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        activeBinId: 8_000,
+        valueSol: 1,
+        valueUsd: 100,
+        pnlPercent: 0,
+        feeAccruedSol: 0,
+        unclaimedFeesSol: 0,
+        inRange: true,
+        source: "meteora_http",
+        stale: false
+      }
+    ]
+  });
+
+  const response = await requestApi("/status", undefined, "127.0.0.1", runtime);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+
+  assert.equal(payload.portfolio.activeValueSol, 1.1);
+  assert.equal(payload.portfolio.activeClaimedFeesSol, 0.05);
+  assertApprox(payload.portfolio.activePnlSol, 0.15);
+  assert.equal(payload.portfolio.totalEquitySol, 11.15);
+  assertApprox(payload.portfolio.totalEquityUsd, 1115);
+  assertApprox(payload.portfolio.activeMarkChange24hSol, 0.1);
+  assert.equal(payload.portfolio.markChangeIncludesClaimedFees, false);
+});
+
+test("GET /portfolio/report 返回区间盈亏日历和交易次数", async () => {
+  const now = new Date();
+  const position = createPositionRecord({
+    currentValueUsd: 120,
+    depositedSol: 1,
+    paper: {
+      currentValueSol: 1.2,
+      unclaimedFeesSol: 0,
+      lastValuationAt: now
+    }
+  });
+  const today = now.toISOString().slice(0, 10);
+  const runtime = createRuntimeStub({
+    positions: [position],
+    paperSnapshots: [
+      {
+        id: "paper-start",
+        positionId: position.id,
+        skillId: position.skillId,
+        skillVersion: position.skillVersion,
+        poolAddress: position.poolAddress,
+        tokenMint: position.tokenMint,
+        tokenSymbol: position.tokenSymbol,
+        timestamp: new Date(`${today}T00:05:00.000Z`),
+        activeBinId: 8_000,
+        valueSol: 1,
+        valueUsd: 100,
+        pnlPercent: 0,
+        feeAccruedSol: 0,
+        unclaimedFeesSol: 0,
+        inRange: true,
+        source: "meteora_http",
+        stale: false
+      },
+      {
+        id: "paper-end",
+        positionId: position.id,
+        skillId: position.skillId,
+        skillVersion: position.skillVersion,
+        poolAddress: position.poolAddress,
+        tokenMint: position.tokenMint,
+        tokenSymbol: position.tokenSymbol,
+        timestamp: new Date(`${today}T00:10:00.000Z`),
+        activeBinId: 8_001,
+        valueSol: 1.2,
+        valueUsd: 120,
+        pnlPercent: 20,
+        feeAccruedSol: 0,
+        unclaimedFeesSol: 0,
+        inRange: true,
+        source: "meteora_http",
+        stale: false
+      }
+    ],
+    auditEvents: [
+      {
+        source: "actions",
+        timestamp: new Date(`${today}T00:11:00.000Z`).toISOString(),
+        payload: {
+          cycleId: "cycle-report",
+          timestamp: new Date(`${today}T00:11:00.000Z`).toISOString(),
+          action: { type: "claim" },
+          result: { status: "success" }
+        }
+      }
+    ]
+  });
+
+  const response = await requestApi("/portfolio/report?days=7&timezoneOffsetMinutes=0", undefined, "127.0.0.1", runtime);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  const todayBucket = payload.days.find((day: { date: string }) => day.date === today);
+
+  assert.equal(payload.range.days, 7);
+  assert.equal(payload.summary.tradeCount, 1);
+  assertApprox(payload.summary.totalPnlSol, 0.2);
+  assertApprox(todayBucket.pnlSol, 0.2);
+  assert.equal(todayBucket.tradeCount, 1);
+});
+
+test("GET /trades 返回交易历史和已实现盈亏统计", async () => {
+  const closedPosition = createPositionRecord({
+    id: "closed-rkc",
+    tokenSymbol: "RKC",
+    tokenMint: "mint-rkc",
+    poolAddress: "pool-rkc",
+    status: "closed",
+    depositedSol: 1,
+    pnlPercent: 25,
+    totalFeesClaimedSol: 0.05,
+    currentValueUsd: 125,
+    closedAt: new Date("2026-01-03T00:00:00.000Z")
+  });
+  const runtime = createRuntimeStub({
+    auditEvents: [
+      {
+        source: "actions",
+        timestamp: "2026-01-03T00:00:00.000Z",
+        payload: {
+          cycleId: "cycle-trades",
+          timestamp: "2026-01-03T00:00:00.000Z",
+          action: {
+            id: "action-close",
+            type: "close",
+            trigger: "stop_loss",
+            positionId: closedPosition.id
+          },
+          result: {
+            actionId: "action-close",
+            type: "close",
+            status: "success",
+            message: "模拟平仓成功，回收 1.2500 SOL。",
+            txSignatures: ["tx-close-rkc"],
+            latencyMs: 12,
+            metadata: {
+              backend: "dry_run",
+              recoveredSol: 1.25,
+              positionId: closedPosition.id
+            },
+            stateOperations: [
+              { kind: "adjust_capital", deltaSol: 1.25 },
+              { kind: "upsert_position", position: closedPosition }
+            ]
+          }
+        }
+      }
+    ]
+  });
+
+  const response = await requestApi("/trades?actionType=close&status=success&token=rkc&limit=10", undefined, "127.0.0.1", runtime);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+
+  assert.equal(payload.trades.length, 1);
+  assert.equal(payload.trades[0].actionType, "close");
+  assert.equal(payload.trades[0].tokenSymbol, "RKC");
+  assert.equal(payload.trades[0].recoveredSol, 1.25);
+  assertApprox(payload.trades[0].realizedPnlSol, 0.25);
+  assertApprox(payload.trades[0].realizedPnlPercent, 25);
+  assert.equal(payload.summary.total, 1);
+  assertApprox(payload.summary.totalRealizedPnlSol, 0.25);
+  assert.equal(payload.summary.winningTrades, 1);
 });
 
 test("GET /positions 支持状态、搜索、排序和分页", async () => {

@@ -12,7 +12,7 @@ function createRuntimeStub(): AppRuntime {
   const config = createAgentConfig();
   const positions = [
     createPositionRecord({
-      id: "active-bonk",
+      id: "position-1778697306867-pugxh0",
       tokenSymbol: "BONK",
       pnlPercent: 4.2,
       openedAt: new Date("2026-01-02T00:00:00.000Z")
@@ -156,12 +156,17 @@ test("TelegramBotService 只读命令返回状态、页面、仓位和事件", a
   assert.match(dashboard, /Bearer Token/);
 
   const positions = await service.handleTextForTest("12345", "/positions active bonk");
-  assert.match(positions, /active-bonk/);
+  assert.match(positions, /\[xAgent\] 活跃仓位 · bonk/);
+  assert.match(positions, /BONK \| PnL \+4\.2%/);
+  assert.match(positions, /区间内 \| bin 7995\.\.8005 \| bread n butter \| ref pugxh0/);
+  assert.doesNotMatch(positions, /position-1778697306867-pugxh0/);
   assert.doesNotMatch(positions, /closed-rkc/);
 
-  const position = await service.handleTextForTest("12345", "/position RKC");
-  assert.match(position, /仓位详情 RKC/);
-  assert.match(position, /status=closed/);
+  const position = await service.handleTextForTest("12345", "/position pugxh0");
+  assert.match(position, /仓位详情 BONK/);
+  assert.match(position, /状态 active \| 区间内/);
+  assert.match(position, /短码 pugxh0/);
+  assert.match(position, /内部ID position-1778697306867-pugxh0/);
 
   const events = await service.handleTextForTest("12345", "/events actions rkc");
   assert.match(events, /source=actions/);

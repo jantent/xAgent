@@ -9,13 +9,14 @@ description: Repository-local workflow for strict health checks and safe remedia
 
 Use this skill only for this repository's cloud deployment. It assumes the deployed service is xAgent running as a systemd service, usually:
 
+- current SSH target: `xagent-vps` (`root@43.247.132.62`, public-key auth, `IPQoS none`)
 - app dir: `/opt/xagent`
 - env file: `/etc/xagent/xagent.env`
 - service: `xagent.service`
 - API: `127.0.0.1:8787`
 - normal dryRun mode: `execution.mode=dry_run`
 
-If the current thread provides a host, use that host. Do not assume a password or secret. Do not place this skill outside this repository.
+For this repository's current cloud deployment, prefer the local SSH alias `xagent-vps`. It is configured for root public-key login and `IPQoS none`; do not ask the user for the server password unless the alias/key path is proven unavailable. If the current thread provides a different host, use that host. Do not assume a password or secret. Do not place this skill outside this repository.
 
 ## Safety Rules
 
@@ -28,13 +29,13 @@ If the current thread provides a host, use that host. Do not assume a password o
 
 ## Baseline Checks
 
-Run these groups first. Use SSH escalation when needed.
+Run these groups first. Use SSH escalation when needed. For the current deployment, execute remote commands through `ssh xagent-vps '...'`.
 
 1. Service and network:
-   - `systemctl is-active xagent.service`
-   - `systemctl is-enabled xagent.service`
-   - `systemctl --no-pager --full status xagent.service`
-   - `ss -ltnp | grep 8787`
+   - `ssh xagent-vps 'systemctl is-active xagent.service'`
+   - `ssh xagent-vps 'systemctl is-enabled xagent.service'`
+   - `ssh xagent-vps 'systemctl --no-pager --full status xagent.service'`
+   - `ssh xagent-vps 'ss -ltnp | grep 8787'`
    - Expected: service `active`, enabled, Node process running, API bound to `127.0.0.1:8787` only.
 
 2. Environment and permissions:
@@ -45,9 +46,9 @@ Run these groups first. Use SSH escalation when needed.
    - Expected: env file readable by the service user/group, not world-readable.
 
 3. Runtime status through API:
-   - `/health` must return `ok: true`.
-   - `/status` without token should return `401`.
-   - `/status` with `Authorization: Bearer $XAGENT_API_TOKEN` should return `200`.
+   - `ssh xagent-vps 'curl -s http://127.0.0.1:8787/health'` must return `ok: true`.
+   - `ssh xagent-vps 'curl -s -w "\n%{http_code}\n" http://127.0.0.1:8787/status'` should return `401`.
+   - `ssh xagent-vps 'set -a; source /etc/xagent/xagent.env; set +a; curl -s -w "\n%{http_code}\n" -H "Authorization: Bearer $XAGENT_API_TOKEN" http://127.0.0.1:8787/status'` should return `200`.
    - Expected status fields:
      - `mode=normal`
      - `manualPause=false`
@@ -78,21 +79,21 @@ Run these groups first. Use SSH escalation when needed.
 
 6. Logs:
    - Check current-window logs, not stale pre-configuration history:
-     `journalctl -u xagent.service --since '10 min ago' --no-pager`
+     `ssh xagent-vps 'journalctl -u xagent.service --since "10 min ago" --no-pager'`
    - Treat current `GMGN_API_KEY is required`, `OpenAI API Key 未配置`, provider down, state persistence errors, `close_only`, and `emergency` as actionable.
    - During dryRun, `钱包密钥未加载` is acceptable. `Discord notifier 未启用` is acceptable if Telegram is configured.
 
 ## Safe Remediation
 
 - Service down:
-  1. inspect `journalctl -u xagent.service -n 120 --no-pager`
-  2. run `cd /opt/xagent && npm run check`
-  3. if source changed, run `npm run build`
-  4. restart with `systemctl restart xagent.service`
+  1. inspect `ssh xagent-vps 'journalctl -u xagent.service -n 120 --no-pager'`
+  2. run `ssh xagent-vps 'cd /opt/xagent && npm run check'`
+  3. if source changed, run `ssh xagent-vps 'cd /opt/xagent && npm run build'`
+  4. restart with `ssh xagent-vps 'systemctl restart xagent.service'`
 
 - Env updated:
   1. verify key presence without printing values
-  2. `systemctl restart xagent.service`
+  2. `ssh xagent-vps 'systemctl restart xagent.service'`
   3. re-check `/status` and recent logs
 
 - GMGN direct CLI says key is missing but `/status` says GMGN is healthy:

@@ -34,6 +34,8 @@ export function renderDashboardPage(): string {
     '      </div>',
     '      <nav class="side-nav">',
     '        <a class="nav-item is-active" href="#positions-events" data-view-link="positions-events">仓位矩阵</a>',
+    '        <a class="nav-item" href="#trade-history" data-view-link="trade-history">交易历史</a>',
+    '        <a class="nav-item" href="#asset-report" data-view-link="asset-report">资产报告</a>',
     '        <a class="nav-item" href="#events" data-view-link="events">事件查询</a>',
     '        <a class="nav-item" href="#settings" data-view-link="settings">系统设置</a>',
     '      </nav>',
@@ -93,9 +95,42 @@ export function renderDashboardPage(): string {
     '              <div id="cycle-summary" class="stack loading-block">等待最近一次循环结果...</div>',
     '            </section>',
     '          </aside>',
-    '        </div>',
+      '        </div>',
+      '      </section>',
+      '      <section id="view-trade-history" class="view" data-view="trade-history">',
+    '        <section class="panel trade-history-panel">',
+    '          <div class="panel-head">',
+    '            <div><p class="eyebrow">Trade History</p><h2>交易历史</h2></div>',
+    '            <span id="trades-caption" class="subtle">等待交易记录...</span>',
+    '          </div>',
+    '          <div class="query-toolbar trade-toolbar">',
+    '            <label><span>动作</span><select id="trade-action"><option value="">全部</option><option value="open">Open</option><option value="close">Close</option><option value="rebalance">Rebalance</option><option value="claim">Claim</option><option value="emergency_exit">Emergency</option></select></label>',
+    '            <label><span>状态</span><select id="trade-status"><option value="">全部</option><option value="success">成功</option><option value="failed">失败</option><option value="skipped">跳过</option></select></label>',
+    '            <label><span>Token</span><input id="trade-token" type="search" placeholder="Symbol / mint / pool / position" /></label>',
+    '            <label><span>开始</span><input id="trade-since" type="datetime-local" /></label>',
+    '            <label><span>结束</span><input id="trade-until" type="datetime-local" /></label>',
+    '            <button class="action-button action-ghost" data-action="trade-query" data-busy-key="global:refresh">查询</button>',
+    '            <button class="action-button action-ghost" data-action="trade-reset" data-busy-key="global:refresh">重置</button>',
+    '          </div>',
+    '          <div id="trade-summary" class="summary-grid loading-block">正在加载交易统计...</div>',
+    '          <div id="trades-panel" class="table-shell loading-block">正在加载交易历史...</div>',
+    '          <button id="trade-load-more" class="action-button action-ghost load-more-button" data-action="trade-load-more" data-busy-key="trade:load-more" disabled>加载更多</button>',
+    '        </section>',
     '      </section>',
-    '      <section id="view-events" class="view" data-view="events">',
+      '      <section id="view-asset-report" class="view" data-view="asset-report">',
+      '        <section class="panel report-panel">',
+      '          <div class="panel-head report-head">',
+      '            <div><p class="eyebrow">Asset Report</p><h2>资产报告</h2></div>',
+      '            <div class="segmented-control" role="group" aria-label="资产报告区间">',
+      '              <button type="button" class="segment-button is-active" data-action="report-range" data-days="7">7天</button>',
+      '              <button type="button" class="segment-button" data-action="report-range" data-days="30">30天</button>',
+      '              <button type="button" class="segment-button" data-action="report-range" data-days="90">90天</button>',
+      '            </div>',
+      '          </div>',
+      '          <div id="asset-report-panel" class="report-shell loading-block">正在加载资产报告...</div>',
+      '        </section>',
+      '      </section>',
+      '      <section id="view-events" class="view" data-view="events">',
     '        <section class="panel events-panel audit-card">',
     '          <div class="panel-head">',
     '            <div><p class="eyebrow">Audit</p><h2>事件查询</h2></div>',
@@ -1492,6 +1527,210 @@ body {
   min-height: 0;
 }
 
+.report-panel {
+  min-height: calc(100vh - 150px);
+}
+
+.report-head {
+  align-items: center;
+}
+
+.segmented-control {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-inset);
+}
+
+.segment-button {
+  min-width: 58px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted-strong);
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.segment-button:hover {
+  color: var(--ink);
+  background: var(--bg-elevated);
+}
+
+.segment-button.is-active {
+  color: #022c22;
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.report-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.report-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 1.15fr) repeat(3, minmax(150px, 0.62fr));
+}
+
+.report-primary {
+  display: grid;
+  align-content: center;
+  min-height: 148px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(45, 212, 191, 0.12), transparent 64%),
+    var(--bg-elevated);
+}
+
+.report-primary-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.report-primary-value {
+  margin-top: 10px;
+  font-size: 2.35rem;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.report-primary-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.report-metric-card {
+  display: grid;
+  align-content: center;
+  min-height: 148px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+.report-metric-card span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.report-metric-card strong {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 1.28rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-metric-card small {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.calendar-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.calendar-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.calendar-title h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.calendar-weekday {
+  padding: 4px 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.calendar-day {
+  min-height: 74px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink);
+  background: transparent;
+}
+
+.calendar-day.has-data {
+  border-color: var(--line);
+  background: var(--bg-elevated);
+}
+
+.calendar-day.day-positive {
+  border-color: rgba(52, 211, 153, 0.22);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.calendar-day.day-negative {
+  border-color: rgba(251, 113, 133, 0.22);
+  background: rgba(251, 113, 133, 0.1);
+}
+
+.calendar-day-number {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.calendar-day-value {
+  display: block;
+  margin-top: 9px;
+  font-size: 0.76rem;
+  line-height: 1.15;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day-meta {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
 .positions-panel {
   display: flex;
   min-height: 0;
@@ -1884,6 +2123,14 @@ tbody tr:hover {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .report-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-primary {
+    grid-column: 1 / -1;
+  }
+
   .desk-grid {
     grid-template-columns: 1fr;
   }
@@ -1934,7 +2181,7 @@ tbody tr:hover {
   }
 
   .side-nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .nav-item {
@@ -1979,9 +2226,33 @@ tbody tr:hover {
   }
 
   .kpi-strip,
+  .report-summary,
   .settings-grid,
   .right-rail {
     grid-template-columns: 1fr;
+  }
+
+  .report-head,
+  .calendar-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .segmented-control {
+    width: 100%;
+  }
+
+  .segment-button {
+    flex: 1;
+  }
+
+  .calendar-grid {
+    gap: 5px;
+  }
+
+  .calendar-day {
+    min-height: 64px;
+    padding: 6px;
   }
 
   .skills-section {
@@ -2013,6 +2284,10 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .side-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topbar-meta,
   .panel-head,
   .provider-top,
@@ -2034,7 +2309,12 @@ const dashboardState = {
   busyKeys: new Set(),
   authToken: window.sessionStorage.getItem("xagent_api_token") ?? "",
   currentView: "positions-events",
+  reportDays: 7,
+  portfolioReport: null,
   positionsPage: null,
+  trades: [],
+  tradeSummary: null,
+  tradePage: null,
   auditEvents: [],
   auditPage: null
 };
@@ -2058,6 +2338,21 @@ function formatNumber(value, options) {
   }
 
   return new Intl.NumberFormat("zh-CN", options ?? { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatSignedNumber(value, options) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  const formatted = formatNumber(Math.abs(value), options);
+  if (value > 0) {
+    return "+" + formatted;
+  }
+  if (value < 0) {
+    return "-" + formatted;
+  }
+  return formatted;
 }
 
 function formatCompact(value) {
@@ -2229,6 +2524,25 @@ function readAuditQuery(offset) {
   };
 }
 
+function readTradeQuery(offset) {
+  return {
+    actionType: inputValue("trade-action"),
+    status: inputValue("trade-status"),
+    token: inputValue("trade-token"),
+    since: toIsoFromLocalInput(inputValue("trade-since")),
+    until: toIsoFromLocalInput(inputValue("trade-until")),
+    limit: 50,
+    offset: offset ?? 0
+  };
+}
+
+function readPortfolioReportQuery() {
+  return {
+    days: dashboardState.reportDays,
+    timezoneOffsetMinutes: new Date().getTimezoneOffset()
+  };
+}
+
 function toIsoFromLocalInput(value) {
   if (!value) {
     return "";
@@ -2383,6 +2697,12 @@ function setBusy(key, value) {
 }
 
 function resolveViewFromHash() {
+  if (window.location.hash === "#asset-report") {
+    return "asset-report";
+  }
+  if (window.location.hash === "#trade-history") {
+    return "trade-history";
+  }
   if (window.location.hash === "#settings") {
     return "settings";
   }
@@ -2411,6 +2731,123 @@ function setCurrentView(view, updateHash) {
   }
 }
 
+function syncReportRangeButtons() {
+  document.querySelectorAll("[data-action='report-range']").forEach(function (node) {
+    node.classList.toggle("is-active", Number(node.dataset.days) === dashboardState.reportDays);
+  });
+}
+
+function parseDateKey(dateKey) {
+  const parts = String(dateKey ?? "").split("-").map(function (part) {
+    return Number(part);
+  });
+  if (parts.length !== 3 || parts.some(function (part) { return !Number.isFinite(part); })) {
+    return null;
+  }
+
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function formatMonthLabel(dateKey) {
+  const date = parseDateKey(dateKey);
+  if (!date) {
+    return "n/a";
+  }
+
+  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0");
+}
+
+function calendarDayTone(day) {
+  if (!day || !day.hasData) {
+    return "";
+  }
+  if (day.pnlSol > 0) {
+    return " day-positive";
+  }
+  if (day.pnlSol < 0) {
+    return " day-negative";
+  }
+  return " has-data";
+}
+
+function renderCalendar(report) {
+  const range = report?.range ?? {};
+  const endDate = parseDateKey(range.endDate);
+  if (!endDate) {
+    return '<div class="empty-state">暂无日历数据。</div>';
+  }
+
+  const dayByDate = new Map((report.days ?? []).map(function (day) {
+    return [day.date, day];
+  }));
+  const monthStart = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+  const daysInMonth = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate();
+  const weekdays = ["S", "M", "T", "W", "T", "F", "S"];
+  const cells = weekdays.map(function (weekday) {
+    return '<div class="calendar-weekday">' + escapeHtml(weekday) + "</div>";
+  });
+
+  for (let index = 0; index < monthStart.getDay(); index += 1) {
+    cells.push('<div class="calendar-day" aria-hidden="true"></div>');
+  }
+
+  for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
+    const dateKey = [
+      endDate.getFullYear(),
+      String(endDate.getMonth() + 1).padStart(2, "0"),
+      String(dayNumber).padStart(2, "0")
+    ].join("-");
+    const day = dayByDate.get(dateKey);
+    const tone = calendarDayTone(day);
+    const hasDataClass = day?.hasData ? " has-data" : "";
+    const value = day?.hasData ? formatSignedNumber(day.pnlSol, { maximumFractionDigits: 4 }) + " SOL" : "";
+    const meta = day?.tradeCount ? day.tradeCount + " 次" : day?.snapshotCount ? day.snapshotCount + " 快照" : "";
+    cells.push(
+      '<div class="calendar-day' + hasDataClass + tone + '">' +
+        '<span class="calendar-day-number">' + escapeHtml(String(dayNumber)) + "</span>" +
+        (value ? '<span class="calendar-day-value ' + metricClass(day.pnlSol) + '">' + escapeHtml(value) + "</span>" : "") +
+        (meta ? '<span class="calendar-day-meta">' + escapeHtml(meta) + "</span>" : "") +
+      "</div>"
+    );
+  }
+
+  return cells.join("");
+}
+
+function renderAssetReport(report) {
+  if (!report || !report.summary) {
+    return '<div class="empty-state">暂无资产报告数据。</div>';
+  }
+
+  const summary = report.summary;
+  const current = summary.current ?? {};
+  const totalPnlSol = summary.totalPnlSol;
+  const totalPnlUsd = summary.totalPnlUsd;
+  const totalPnlPercent = summary.totalPnlPercent;
+  const bestDay = summary.bestDay;
+  const worstDay = summary.worstDay;
+
+  return (
+    '<div class="report-summary">' +
+      '<article class="report-primary">' +
+        '<span class="report-primary-label">' + escapeHtml(report.range?.days ?? dashboardState.reportDays) + "天估算盈亏 · " + escapeHtml(summary.tradeCount ?? 0) + " 个成功动作</span>" +
+        '<strong class="report-primary-value ' + metricClass(totalPnlSol) + '">' + escapeHtml(formatSignedNumber(totalPnlSol, { maximumFractionDigits: 4 })) + " SOL</strong>" +
+        '<span class="report-primary-note">估算 $' + escapeHtml(formatSignedNumber(totalPnlUsd, { maximumFractionDigits: 2 })) + " · " + escapeHtml(formatSignedNumber(totalPnlPercent, { maximumFractionDigits: 2 })) + "%</span>" +
+      "</article>" +
+      '<article class="report-metric-card"><span>当前权益</span><strong>' + escapeHtml(formatNumber(current.totalEquitySol, { maximumFractionDigits: 4 })) + " SOL</strong><small>$" + escapeHtml(formatNumber(current.totalEquityUsd, { maximumFractionDigits: 2 })) + "</small></article>" +
+      '<article class="report-metric-card"><span>胜负天数</span><strong>' + escapeHtml(summary.positiveDays ?? 0) + " / " + escapeHtml(summary.negativeDays ?? 0) + '</strong><small>盈利 / 亏损</small></article>' +
+      '<article class="report-metric-card"><span>最佳 / 最差</span><strong class="' + metricClass(bestDay?.pnlSol) + '">' + escapeHtml(bestDay?.date ?? "n/a") + '</strong><small class="' + metricClass(worstDay?.pnlSol) + '">' + escapeHtml(worstDay?.date ?? "n/a") + "</small></article>" +
+    "</div>" +
+    '<section class="calendar-card">' +
+      '<div class="calendar-title">' +
+        '<h3>' + escapeHtml(formatMonthLabel(report.range?.endDate)) + "</h3>" +
+        '<span class="subtle">dry_run 估算：按 paper snapshots 计算日内 mark-to-market 变化</span>' +
+      "</div>" +
+      '<div class="calendar-grid">' + renderCalendar(report) + "</div>" +
+    "</section>"
+  );
+}
+
 function renderOverview(status, skills, positions) {
   const activePositions = positions.filter(function (position) {
     return position.status === "active";
@@ -2427,6 +2864,7 @@ function renderOverview(status, skills, positions) {
   const schedulableSkills = skills.filter(function (skill) {
     return skill.status === "active" || skill.status === "canary";
   }).length;
+  const portfolio = status.portfolio ?? {};
   const cards = [
     {
       label: "可用资金",
@@ -2442,6 +2880,19 @@ function renderOverview(status, skills, positions) {
       label: "持仓估值",
       value: "$" + formatCompact(activeValueUsd),
       note: "active mark value"
+    },
+    {
+      label: "权益估算",
+      value: formatNumber(portfolio.totalEquitySol, { maximumFractionDigits: 4 }),
+      note: "SOL equity"
+    },
+    {
+      label: "24h 盈亏",
+      value: formatSignedNumber(portfolio.activeMarkChange24hSol, { maximumFractionDigits: 4 }) + " SOL",
+      note:
+        "$" + formatSignedNumber(portfolio.activeMarkChange24hUsd, { maximumFractionDigits: 2 }) +
+        " · " + formatSignedNumber(portfolio.activeMarkChange24hPercent, { maximumFractionDigits: 2 }) + "%",
+      tone: portfolio.activeMarkChange24hSol
     },
     {
       label: "平均 PnL",
@@ -2461,10 +2912,11 @@ function renderOverview(status, skills, positions) {
   ];
 
   return cards.map(function (card) {
+    const valueClass = "stat-value" + (typeof card.tone === "number" ? " " + metricClass(card.tone) : "");
     return (
       '<article class="stat-card">' +
         '<div class="stat-label">' + escapeHtml(card.label) + "</div>" +
-        '<div class="stat-value">' + formatCardValue(card.value) + "</div>" +
+        '<div class="' + valueClass + '">' + formatCardValue(card.value) + "</div>" +
         '<div class="stat-note">' + escapeHtml(card.note) + "</div>" +
       "</article>"
     );
@@ -2675,6 +3127,105 @@ function renderAudit(events) {
   }).join("");
 }
 
+function compactId(value) {
+  const text = String(value ?? "");
+  if (text.length <= 12) {
+    return text || "n/a";
+  }
+
+  return text.slice(0, 4) + "..." + text.slice(-4);
+}
+
+function renderTradeSummary(summary) {
+  if (!summary) {
+    return '<div class="mini-card"><span class="stat-label">Trades</span><strong>n/a</strong></div>';
+  }
+
+  const realized = summary.realizedCount ?? 0;
+  const winRate = realized > 0 ? ((summary.winningTrades ?? 0) / realized) * 100 : undefined;
+  const cards = [
+    {
+      label: "交易数",
+      value: formatNumber(summary.total, { maximumFractionDigits: 0 }),
+      note: "success " + formatNumber(summary.success, { maximumFractionDigits: 0 }) + " / failed " + formatNumber(summary.failed, { maximumFractionDigits: 0 })
+    },
+    {
+      label: "已实现 PnL",
+      value: formatSignedNumber(summary.totalRealizedPnlSol, { maximumFractionDigits: 4 }) + " SOL",
+      note: "closed / emergency",
+      tone: summary.totalRealizedPnlSol
+    },
+    {
+      label: "胜率",
+      value: formatNumber(winRate, { maximumFractionDigits: 1 }) + "%",
+      note: formatNumber(summary.winningTrades, { maximumFractionDigits: 0 }) + "W / " + formatNumber(summary.losingTrades, { maximumFractionDigits: 0 }) + "L"
+    },
+    {
+      label: "领取手续费",
+      value: formatNumber(summary.totalFeesClaimedSol, { maximumFractionDigits: 4 }) + " SOL",
+      note: "claim actions"
+    }
+  ];
+
+  return cards.map(function (card) {
+    const valueClass = "stat-value" + (typeof card.tone === "number" ? " " + metricClass(card.tone) : "");
+    return (
+      '<div class="mini-card">' +
+        '<span class="stat-label">' + escapeHtml(card.label) + "</span>" +
+        '<strong class="' + valueClass + '">' + formatCardValue(card.value) + "</strong>" +
+        '<small class="subtle">' + escapeHtml(card.note) + "</small>" +
+      "</div>"
+    );
+  }).join("");
+}
+
+function renderTrades(trades) {
+  if (!trades.length) {
+    return '<div class="empty-state">没有匹配的交易记录。交易历史来自 actions 审计日志，运行主循环后会在这里沉淀。</div>';
+  }
+
+  const rows = trades.map(function (trade) {
+    const pnl = typeof trade.realizedPnlSol === "number" ? trade.realizedPnlSol : undefined;
+    const pnlPercent = typeof trade.realizedPnlPercent === "number" ? trade.realizedPnlPercent : undefined;
+    const tx = (trade.txSignatures ?? [])[0];
+    const txLink = tx
+      ? '<a class="table-link-action" href="https://solscan.io/tx/' + encodeURIComponent(tx) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(compactId(tx)) + "</a>"
+      : '<span class="subtle">n/a</span>';
+    const capital =
+      typeof trade.recoveredSol === "number"
+        ? formatNumber(trade.recoveredSol, { maximumFractionDigits: 4 }) + " SOL 回收"
+        : typeof trade.depositedSol === "number"
+          ? formatNumber(trade.depositedSol, { maximumFractionDigits: 4 }) + " SOL 投入"
+          : typeof trade.capitalDeltaSol === "number"
+            ? formatSignedNumber(trade.capitalDeltaSol, { maximumFractionDigits: 4 }) + " SOL"
+            : "n/a";
+
+    return (
+      "<tr>" +
+        "<td>" + escapeHtml(formatDate(trade.timestamp)) + "<br /><span class='subtle'>" + escapeHtml(trade.backend ?? "n/a") + "</span></td>" +
+        "<td><span class='pill tone-neutral'>" + escapeHtml(String(trade.actionType).toUpperCase()) + "</span><br /><span class='subtle'>" + escapeHtml(trade.trigger ?? "manual") + "</span></td>" +
+        '<td class="token-cell"><strong>' + escapeHtml(trade.tokenSymbol ?? "n/a") + "</strong><small>" + escapeHtml(trade.poolAddress ?? trade.tokenMint ?? "") + "</small></td>" +
+        "<td>" + escapeHtml(trade.positionId ? compactId(trade.positionId) : "n/a") + "<br /><span class='subtle'>" + escapeHtml(trade.skillId ?? "n/a") + "</span></td>" +
+        '<td class="number-cell">' + escapeHtml(capital) + "</td>" +
+        '<td class="number-cell ' + metricClass(pnl) + '">' +
+          escapeHtml(pnl === undefined ? "n/a" : formatSignedNumber(pnl, { maximumFractionDigits: 4 }) + " SOL") +
+          "<br /><span class='subtle'>" + escapeHtml(pnlPercent === undefined ? "n/a" : formatSignedNumber(pnlPercent, { maximumFractionDigits: 2 }) + "%") + "</span></td>" +
+        '<td class="number-cell">' + escapeHtml(formatNumber(trade.feesClaimedSol ?? trade.totalFeesClaimedSol, { maximumFractionDigits: 4 })) + " SOL</td>" +
+        "<td><span class='" + pillClass(trade.status === "success", trade.status === "skipped") + "'>" + escapeHtml(String(trade.status ?? "n/a").toUpperCase()) + "</span><br /><span class='subtle'>" + escapeHtml(formatNumber(trade.latencyMs, { maximumFractionDigits: 0 })) + " ms</span></td>" +
+        "<td>" + txLink + "</td>" +
+        "<td class='subtle'>" + escapeHtml(trade.message ?? "") + "</td>" +
+      "</tr>"
+    );
+  }).join("");
+
+  return (
+    "<table>" +
+      "<thead><tr><th>时间</th><th>动作</th><th>Token / Pool</th><th>仓位</th><th>资金</th><th>已实现 PnL</th><th>Fees</th><th>状态</th><th>Tx</th><th>结果</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody>" +
+    "</table>"
+  );
+}
+
 function renderPositions(positions) {
   if (!positions.length) {
     return '<div class="empty-state">当前没有仓位。跑一轮主循环后，这里会出现仓位矩阵。</div>';
@@ -2761,6 +3312,26 @@ function updatePositionsCaption(status, positionsPayload) {
     " · 活跃 " + formatNumber(counts.active ?? status.activePositions) +
     " · 已关闭 " + formatNumber(counts.closed ?? 0) +
     " · 异常 " + formatNumber(counts.error ?? 0);
+}
+
+function updateTradeCaption(tradesPayload) {
+  const page = tradesPayload.page ?? {};
+  const summary = tradesPayload.summary ?? {};
+  const shown = tradesPayload.trades?.length ?? 0;
+  byId("trades-caption").textContent =
+    "展示 " + formatNumber(shown) + " / 匹配 " + formatNumber(page.total ?? summary.total ?? 0) +
+    " · 已实现 " + formatSignedNumber(summary.totalRealizedPnlSol, { maximumFractionDigits: 4 }) + " SOL" +
+    " · 领取 " + formatNumber(summary.totalFeesClaimedSol, { maximumFractionDigits: 4 }) + " SOL";
+}
+
+function updateTradeLoadMore(page) {
+  const button = byId("trade-load-more");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  button.disabled = !page?.hasMore;
+  button.textContent = page?.hasMore ? "加载更多" : "没有更多交易";
 }
 
 function updateAuditLoadMore(page) {
@@ -2954,14 +3525,18 @@ async function refreshDashboard(showToastOnSuccess) {
 
   try {
     const positionUrl = buildQueryUrl("/positions", readPositionQuery());
+    const tradeUrl = buildQueryUrl("/trades", readTradeQuery(0));
     const auditUrl = buildQueryUrl("/audit/events", readAuditQuery(0));
+    const reportUrl = buildQueryUrl("/portfolio/report", readPortfolioReportQuery());
     const results = await Promise.all([
       apiRequest("/status"),
       apiRequest("/skills"),
       apiRequest("/skills/optimizer/recommendations"),
       apiRequest(positionUrl),
       apiRequest("/positions?status=active&limit=500"),
-      apiRequest(auditUrl)
+      apiRequest(tradeUrl),
+      apiRequest(auditUrl),
+      apiRequest(reportUrl)
     ]);
 
     const status = results[0];
@@ -2970,21 +3545,34 @@ async function refreshDashboard(showToastOnSuccess) {
     const positionsPayload = results[3];
     const positions = positionsPayload.positions ?? [];
     const overviewPositions = results[4].positions ?? [];
-    const auditPayload = results[5];
+    const tradePayload = results[5];
+    const auditPayload = results[6];
+    const portfolioReport = results[7];
+    const trades = tradePayload.trades ?? [];
     const auditEvents = auditPayload.events ?? [];
+    dashboardState.trades = trades;
+    dashboardState.tradeSummary = tradePayload.summary ?? null;
+    dashboardState.tradePage = tradePayload.page ?? null;
     dashboardState.auditEvents = auditEvents;
     dashboardState.auditPage = auditPayload.page ?? null;
+    dashboardState.portfolioReport = portfolioReport;
 
     updateHeader(status);
     syncPositionSkillOptions(skills);
+    syncReportRangeButtons();
     byId("overview-grid").innerHTML = renderOverview(status, skills, overviewPositions);
+    byId("asset-report-panel").innerHTML = renderAssetReport(portfolioReport);
     byId("cycle-summary").innerHTML = renderCycleSummary(status);
     byId("execution-summary").innerHTML = renderExecutionSummary(status);
     byId("infra-health").innerHTML = renderInfra(status);
+    byId("trade-summary").innerHTML = renderTradeSummary(dashboardState.tradeSummary);
+    byId("trades-panel").innerHTML = renderTrades(dashboardState.trades);
     byId("audit-panel").innerHTML = renderAudit(dashboardState.auditEvents);
     byId("positions-panel").innerHTML = renderPositions(positions);
     byId("skills-panel").innerHTML = renderSkills(skills, optimizerRecommendations);
     updatePositionsCaption(status, positionsPayload);
+    updateTradeCaption(tradePayload);
+    updateTradeLoadMore(dashboardState.tradePage);
     updateAuditLoadMore(dashboardState.auditPage);
 
     const stamp = new Date();
@@ -3015,6 +3603,28 @@ async function loadMoreAuditEvents() {
     dashboardState.auditPage = payload.page ?? null;
     byId("audit-panel").innerHTML = renderAudit(dashboardState.auditEvents);
     updateAuditLoadMore(dashboardState.auditPage);
+  });
+}
+
+async function loadMoreTrades() {
+  const page = dashboardState.tradePage;
+  if (!page?.hasMore || page.nextOffset === null || page.nextOffset === undefined) {
+    return;
+  }
+
+  await withAction("trade:load-more", async function () {
+    const payload = await apiRequest(buildQueryUrl("/trades", readTradeQuery(page.nextOffset)));
+    dashboardState.trades = dashboardState.trades.concat(payload.trades ?? []);
+    dashboardState.tradeSummary = payload.summary ?? dashboardState.tradeSummary;
+    dashboardState.tradePage = payload.page ?? null;
+    byId("trade-summary").innerHTML = renderTradeSummary(dashboardState.tradeSummary);
+    byId("trades-panel").innerHTML = renderTrades(dashboardState.trades);
+    updateTradeCaption({
+      trades: dashboardState.trades,
+      summary: dashboardState.tradeSummary,
+      page: dashboardState.tradePage
+    });
+    updateTradeLoadMore(dashboardState.tradePage);
   });
 }
 
@@ -3091,6 +3701,15 @@ function resetPositionFilters() {
 
 function resetAuditFilters() {
   ["audit-source", "audit-search", "audit-cycle-id", "audit-since", "audit-until"].forEach(function (id) {
+    const node = byId(id);
+    if (node && "value" in node) {
+      node.value = "";
+    }
+  });
+}
+
+function resetTradeFilters() {
+  ["trade-action", "trade-status", "trade-token", "trade-since", "trade-until"].forEach(function (id) {
     const node = byId(id);
     if (node && "value" in node) {
       node.value = "";
@@ -3184,6 +3803,26 @@ document.addEventListener("click", function (event) {
     return;
   }
 
+  if (action === "trade-query") {
+    withAction("global:refresh", function () {
+      return refreshDashboard(false);
+    });
+    return;
+  }
+
+  if (action === "trade-reset") {
+    resetTradeFilters();
+    withAction("global:refresh", function () {
+      return refreshDashboard(false);
+    });
+    return;
+  }
+
+  if (action === "trade-load-more") {
+    loadMoreTrades();
+    return;
+  }
+
   if (action === "audit-reset") {
     resetAuditFilters();
     withAction("global:refresh", function () {
@@ -3194,6 +3833,16 @@ document.addEventListener("click", function (event) {
 
   if (action === "audit-load-more") {
     loadMoreAuditEvents();
+    return;
+  }
+
+  if (action === "report-range") {
+    const nextDays = Number(target.dataset.days);
+    dashboardState.reportDays = nextDays === 30 || nextDays === 90 ? nextDays : 7;
+    syncReportRangeButtons();
+    withAction("global:refresh", function () {
+      return refreshDashboard(false);
+    });
     return;
   }
 
@@ -3240,7 +3889,7 @@ document.addEventListener("change", function (event) {
     return;
   }
 
-  if (target.id.startsWith("position-")) {
+  if (target.id.startsWith("position-") || target.id.startsWith("trade-")) {
     refreshDashboard(false);
   }
 });
@@ -3251,7 +3900,7 @@ document.addEventListener("keydown", function (event) {
     return;
   }
 
-  if (target.id.startsWith("position-") || target.id.startsWith("audit-")) {
+  if (target.id.startsWith("position-") || target.id.startsWith("audit-") || target.id.startsWith("trade-")) {
     event.preventDefault();
     refreshDashboard(false);
   }
@@ -3264,6 +3913,7 @@ window.addEventListener("load", function () {
   }
 
   setCurrentView(resolveViewFromHash(), !window.location.hash);
+  syncReportRangeButtons();
   syncRefreshTimer();
   connectStatusStream();
   refreshDashboard(false);
