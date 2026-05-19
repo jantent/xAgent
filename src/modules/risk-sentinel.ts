@@ -11,10 +11,33 @@ import type {
   UrgentSignalSummary
 } from "../domain/models.js";
 import type { AgentConfig } from "../config/types.js";
+import type { RiskFilterConfig } from "../config/types.js";
 import type { SharedStateSnapshot } from "../core/shared-state.js";
 import type { SkillManager } from "../managers/skill-manager.js";
 import { createId } from "../utils/async.js";
 import type { Logger } from "../utils/logger.js";
+
+function readFiniteMeta(pool: PoolCandidate, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = pool.meta?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function readBooleanMeta(pool: PoolCandidate, ...keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = pool.meta?.[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
 
 /**
  * RiskSentinel 是系统里最不应该“想当然”的模块。
@@ -48,6 +71,10 @@ export class RiskSentinel {
 
       if (mode !== SystemMode.NORMAL) {
         rejectionReason = `当前系统模式为 ${mode}，禁止新开仓。`;
+      }
+
+      if (!rejectionReason) {
+        rejectionReason = this.evaluateHardFilters(plan.pool);
       }
 
       const sameSkillCount = activePositions.filter((position) => position.skillId === plan.skill.id).length;
@@ -263,6 +290,77 @@ export class RiskSentinel {
 
   private findSkill(skillId: string, version: string): SkillMeta | undefined {
     return this.skillManager.getSkill(skillId, version) ?? undefined;
+  }
+
+  private evaluateHardFilters(pool: PoolCandidate): string | undefined {
+    const filters = this.config.risk.filters;
+    if (!filters || filters.enabled === false) {
+      return undefined;
+    }
+
+    const checks: Array<[keyof RiskFilterConfig, boolean, string]> = [
+      ["min_tvl", pool.tvl < (filters.min_tvl ?? Number.NEGATIVE_INFINITY), `池子 TVL ${pool.tvl.toFixed(0)} 低于硬过滤阈值。`],
+      [
+        "min_volume_24h",
+        pool.vol24h < (filters.min_volume_24h ?? Number.NEGATIVE_INFINITY),
+        `池子 24h volume ${pool.vol24h.toFixed(0)} 低于硬过滤阈值。`
+      ],
+      [
+        "max_fee_tvl_ratio_24h",
+        pool.feeTvlRatio24h > (filters.max_fee_tvl_ratio_24h ?? Number.POSITIVE_INFINITY),
+        `池子 fee/TVL ${pool.feeTvlRatio24h.toFixed(2)} 超过硬过滤阈值。`
+      ],
+      [
+        "min_safety_score",
+        pool.safetyScore < (filters.min_safety_score ?? Number.NEGATIVE_INFINITY),
+        `池子 safety score ${pool.safetyScore.toFixed(2)} 低于硬过滤阈值。`
+      ],
+      [
+        "min_smart_money_net",
+        pool.smartMoneyNet < (filters.min_smart_money_net ?? Number.NEGATIVE_INFINITY),
+        `池子 smart money net ${pool.smartMoneyNet.toFixed(2)} 低于硬过滤阈值。`
+      ]
+    ];
+
+    for (const [key, failed, reason] of checks) {
+      if (filters[key] !== undefined && failed) {
+        return reason;
+      }
+    }
+
+    const topHolderPct = readFiniteMeta(pool, "topHolderPct", "top_holder_pct");
+    if (filters.max_top_holder_pct !== undefined && topHolderPct !== undefined && topHolderPct > filters.max_top_holder_pct) {
+      return `Token top holder ${topHolderPct.toFixed(2)}% 超过硬过滤阈值。`;
+    }
+
+    const rugProbability = readFiniteMeta(pool, "rugProbability", "rug_probability");
+    if (
+      filters.max_rug_probability !== undefined &&
+      rugProbability !== undefined &&
+      rugProbability > filters.max_rug_probability
+    ) {
+      return `Token rug probability ${rugProbability.toFixed(2)} 超过硬过滤阈值。`;
+    }
+
+    const bundlerRate = readFiniteMeta(pool, "bundlerRate", "bundler_rate");
+    if (filters.max_bundler_rate !== undefined && bundlerRate !== undefined && bundlerRate > filters.max_bundler_rate) {
+      return `Token bundler rate ${bundlerRate.toFixed(2)} 超过硬过滤阈值。`;
+    }
+
+    const botDegenRate = readFiniteMeta(pool, "botDegenRate", "bot_degen_rate");
+    if (filters.max_bot_degen_rate !== undefined && botDegenRate !== undefined && botDegenRate > filters.max_bot_degen_rate) {
+      return `Token bot/degen rate ${botDegenRate.toFixed(2)} 超过硬过滤阈值。`;
+    }
+
+    if (filters.reject_dev_sell && readBooleanMeta(pool, "hasDevSell", "has_dev_sell") === true) {
+      return "Token 命中 dev-sell 硬过滤。";
+    }
+
+    if (filters.reject_stale_data && readBooleanMeta(pool, "stale", "isStale", "is_stale") === true) {
+      return "池子或安全数据已过期，命中 stale 硬过滤。";
+    }
+
+    return undefined;
   }
 
   private buildRangeAroundActiveBin(

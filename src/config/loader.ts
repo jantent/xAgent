@@ -16,6 +16,7 @@ const WALLET_MODES = new Set(["injected", "phantom_delegate"]);
 const ALERT_LEVELS = new Set(["critical", "high", "medium", "low"]);
 const ACTIVE_POSITION_RECONCILE_STRATEGIES = new Set(["fail", "close_missing", "repair"]);
 const PERSIST_FAILURE_STRATEGIES = new Set(["off", "close_only", "close_only_then_pause"]);
+const SKILL_OPTIMIZER_ACTIONS = new Set(["hold", "tighten", "widen", "reduce_risk", "increase_canary"]);
 const DEFAULT_PAPER_TRADING = {
   enabled: true,
   valuation_interval_ms: 300_000,
@@ -31,7 +32,35 @@ const DEFAULT_SKILL_OPTIMIZER = {
   min_closed_positions: 5,
   min_snapshots: 20,
   evaluation_interval_ms: 1_800_000,
-  max_patch_pct: 20
+  max_patch_pct: 20,
+  auto_apply: false,
+  min_auto_apply_confidence: 0.7,
+  min_auto_apply_closed_positions: 10,
+  auto_apply_actions: ["tighten", "widen", "reduce_risk"]
+};
+const DEFAULT_COST_MODEL = {
+  enabled: false,
+  network_fee_lamports: 5_000,
+  priority_fee_lamports: 100_000,
+  jito_tip_lamports: 10_000,
+  rent_per_position_sol: 0.0025,
+  slippage_bps: 80,
+  rebalance_slippage_bps: 120,
+  failed_tx_fee_lamports: 5_000
+};
+const DEFAULT_CANARY = {
+  enabled: false,
+  max_concurrent_positions: 1,
+  max_position_sol: 0.2,
+  kill_switch: {
+    enabled: true,
+    max_daily_loss_sol: 0.2,
+    max_daily_loss_pct: 1,
+    max_position_loss_pct: 12,
+    max_consecutive_failures: 3,
+    max_pending_action_age_ms: 120_000,
+    max_stale_position_count: 1
+  }
 };
 
 type RawRecord = Record<string, unknown>;
@@ -139,6 +168,16 @@ function optionalStringArray(record: RawRecord, key: string, context: string): s
   }
 
   return requireStringArray(record, key, context);
+}
+
+function validateStringSet(values: string[], allowed: Set<string>, context: string): string[] {
+  for (const value of values) {
+    if (!allowed.has(value)) {
+      throw new Error(`${context} 包含非法值 ${value}`);
+    }
+  }
+
+  return values;
 }
 
 function requireEnum(record: RawRecord, key: string, allowed: Set<string>, context: string): string {
@@ -368,6 +407,8 @@ function normalizeAgentConfig(raw: RawRecord, context: string): AgentConfig {
   const guardrails = optionalRecord(raw, "guardrails", context);
   const paperTrading = optionalRecord(raw, "paper_trading", context);
   const skillOptimizer = optionalRecord(raw, "skill_optimizer", context);
+  const costModel = optionalRecord(raw, "cost_model", context);
+  const canary = optionalRecord(raw, "canary", context);
 
   const mode = execution ? requireEnum(execution, "mode", EXECUTION_MODES, `${context}.execution`) : "dry_run";
   const live = execution ? optionalRecord(execution, "live", `${context}.execution`) : undefined;
@@ -483,7 +524,96 @@ function normalizeAgentConfig(raw: RawRecord, context: string): AgentConfig {
         DEFAULT_SKILL_OPTIMIZER.evaluation_interval_ms,
       max_patch_pct:
         optionalNumber(skillOptimizer ?? {}, "max_patch_pct", `${context}.skill_optimizer`) ??
-        DEFAULT_SKILL_OPTIMIZER.max_patch_pct
+        DEFAULT_SKILL_OPTIMIZER.max_patch_pct,
+      auto_apply:
+        optionalBoolean(skillOptimizer ?? {}, "auto_apply", `${context}.skill_optimizer`) ??
+        DEFAULT_SKILL_OPTIMIZER.auto_apply,
+      min_auto_apply_confidence:
+        optionalNumber(skillOptimizer ?? {}, "min_auto_apply_confidence", `${context}.skill_optimizer`) ??
+        DEFAULT_SKILL_OPTIMIZER.min_auto_apply_confidence,
+      min_auto_apply_closed_positions:
+        optionalNumber(skillOptimizer ?? {}, "min_auto_apply_closed_positions", `${context}.skill_optimizer`) ??
+        DEFAULT_SKILL_OPTIMIZER.min_auto_apply_closed_positions,
+      auto_apply_actions: validateStringSet(
+        optionalStringArray(skillOptimizer ?? {}, "auto_apply_actions", `${context}.skill_optimizer`).length > 0
+          ? optionalStringArray(skillOptimizer ?? {}, "auto_apply_actions", `${context}.skill_optimizer`)
+          : DEFAULT_SKILL_OPTIMIZER.auto_apply_actions,
+        SKILL_OPTIMIZER_ACTIONS,
+        `${context}.skill_optimizer.auto_apply_actions`
+      )
+    },
+    cost_model: {
+      enabled: optionalBoolean(costModel ?? {}, "enabled", `${context}.cost_model`) ?? DEFAULT_COST_MODEL.enabled,
+      network_fee_lamports:
+        optionalNumber(costModel ?? {}, "network_fee_lamports", `${context}.cost_model`) ??
+        DEFAULT_COST_MODEL.network_fee_lamports,
+      priority_fee_lamports:
+        optionalNumber(costModel ?? {}, "priority_fee_lamports", `${context}.cost_model`) ??
+        DEFAULT_COST_MODEL.priority_fee_lamports,
+      jito_tip_lamports:
+        optionalNumber(costModel ?? {}, "jito_tip_lamports", `${context}.cost_model`) ??
+        DEFAULT_COST_MODEL.jito_tip_lamports,
+      rent_per_position_sol:
+        optionalNumber(costModel ?? {}, "rent_per_position_sol", `${context}.cost_model`) ??
+        DEFAULT_COST_MODEL.rent_per_position_sol,
+      slippage_bps:
+        optionalNumber(costModel ?? {}, "slippage_bps", `${context}.cost_model`) ??
+        DEFAULT_COST_MODEL.slippage_bps,
+      rebalance_slippage_bps:
+        optionalNumber(costModel ?? {}, "rebalance_slippage_bps", `${context}.cost_model`) ??
+        DEFAULT_COST_MODEL.rebalance_slippage_bps,
+      failed_tx_fee_lamports:
+        optionalNumber(costModel ?? {}, "failed_tx_fee_lamports", `${context}.cost_model`) ??
+        DEFAULT_COST_MODEL.failed_tx_fee_lamports
+    },
+    canary: {
+      enabled: optionalBoolean(canary ?? {}, "enabled", `${context}.canary`) ?? DEFAULT_CANARY.enabled,
+      max_concurrent_positions:
+        optionalNumber(canary ?? {}, "max_concurrent_positions", `${context}.canary`) ??
+        DEFAULT_CANARY.max_concurrent_positions,
+      max_position_sol:
+        optionalNumber(canary ?? {}, "max_position_sol", `${context}.canary`) ?? DEFAULT_CANARY.max_position_sol,
+      kill_switch: {
+        enabled:
+          optionalBoolean(optionalRecord(canary ?? {}, "kill_switch", `${context}.canary`) ?? {}, "enabled", `${context}.canary.kill_switch`) ??
+          DEFAULT_CANARY.kill_switch.enabled,
+        max_daily_loss_sol:
+          optionalNumber(
+            optionalRecord(canary ?? {}, "kill_switch", `${context}.canary`) ?? {},
+            "max_daily_loss_sol",
+            `${context}.canary.kill_switch`
+          ) ?? DEFAULT_CANARY.kill_switch.max_daily_loss_sol,
+        max_daily_loss_pct:
+          optionalNumber(
+            optionalRecord(canary ?? {}, "kill_switch", `${context}.canary`) ?? {},
+            "max_daily_loss_pct",
+            `${context}.canary.kill_switch`
+          ) ?? DEFAULT_CANARY.kill_switch.max_daily_loss_pct,
+        max_position_loss_pct:
+          optionalNumber(
+            optionalRecord(canary ?? {}, "kill_switch", `${context}.canary`) ?? {},
+            "max_position_loss_pct",
+            `${context}.canary.kill_switch`
+          ) ?? DEFAULT_CANARY.kill_switch.max_position_loss_pct,
+        max_consecutive_failures:
+          optionalNumber(
+            optionalRecord(canary ?? {}, "kill_switch", `${context}.canary`) ?? {},
+            "max_consecutive_failures",
+            `${context}.canary.kill_switch`
+          ) ?? DEFAULT_CANARY.kill_switch.max_consecutive_failures,
+        max_pending_action_age_ms:
+          optionalNumber(
+            optionalRecord(canary ?? {}, "kill_switch", `${context}.canary`) ?? {},
+            "max_pending_action_age_ms",
+            `${context}.canary.kill_switch`
+          ) ?? DEFAULT_CANARY.kill_switch.max_pending_action_age_ms,
+        max_stale_position_count:
+          optionalNumber(
+            optionalRecord(canary ?? {}, "kill_switch", `${context}.canary`) ?? {},
+            "max_stale_position_count",
+            `${context}.canary.kill_switch`
+          ) ?? DEFAULT_CANARY.kill_switch.max_stale_position_count
+      }
     },
     guardrails: guardrails
       ? {
@@ -574,7 +704,31 @@ function normalizeAgentConfig(raw: RawRecord, context: string): AgentConfig {
       max_alive_hours: requireNumber(risk, "max_alive_hours", `${context}.risk`),
       daily_max_loss_pct: requireNumber(risk, "daily_max_loss_pct", `${context}.risk`),
       fee_claim_interval_hours: requireNumber(risk, "fee_claim_interval_hours", `${context}.risk`),
-      lincoln_exit_threshold: requireNumber(risk, "lincoln_exit_threshold", `${context}.risk`)
+      lincoln_exit_threshold: requireNumber(risk, "lincoln_exit_threshold", `${context}.risk`),
+      filters: optionalRecord(risk, "filters", `${context}.risk`)
+        ? {
+            enabled: optionalBoolean(requireRecord(risk, "filters", `${context}.risk`), "enabled", `${context}.risk.filters`),
+            min_tvl: optionalNumber(requireRecord(risk, "filters", `${context}.risk`), "min_tvl", `${context}.risk.filters`),
+            min_volume_24h: optionalNumber(requireRecord(risk, "filters", `${context}.risk`), "min_volume_24h", `${context}.risk.filters`),
+            max_fee_tvl_ratio_24h: optionalNumber(
+              requireRecord(risk, "filters", `${context}.risk`),
+              "max_fee_tvl_ratio_24h",
+              `${context}.risk.filters`
+            ),
+            min_safety_score: optionalNumber(requireRecord(risk, "filters", `${context}.risk`), "min_safety_score", `${context}.risk.filters`),
+            max_top_holder_pct: optionalNumber(requireRecord(risk, "filters", `${context}.risk`), "max_top_holder_pct", `${context}.risk.filters`),
+            max_rug_probability: optionalNumber(
+              requireRecord(risk, "filters", `${context}.risk`),
+              "max_rug_probability",
+              `${context}.risk.filters`
+            ),
+            min_smart_money_net: optionalNumber(requireRecord(risk, "filters", `${context}.risk`), "min_smart_money_net", `${context}.risk.filters`),
+            max_bundler_rate: optionalNumber(requireRecord(risk, "filters", `${context}.risk`), "max_bundler_rate", `${context}.risk.filters`),
+            max_bot_degen_rate: optionalNumber(requireRecord(risk, "filters", `${context}.risk`), "max_bot_degen_rate", `${context}.risk.filters`),
+            reject_dev_sell: optionalBoolean(requireRecord(risk, "filters", `${context}.risk`), "reject_dev_sell", `${context}.risk.filters`),
+            reject_stale_data: optionalBoolean(requireRecord(risk, "filters", `${context}.risk`), "reject_stale_data", `${context}.risk.filters`)
+          }
+        : undefined
     },
     notifications: {
       telegram: notifications && optionalRecord(notifications, "telegram", `${context}.notifications`)
@@ -596,7 +750,8 @@ function normalizeAgentConfig(raw: RawRecord, context: string): AgentConfig {
           discovery_sort_by: optionalString(meteora, "discovery_sort_by", `${context}.meteora`),
           discovery_min_volume_24h: optionalNumber(meteora, "discovery_min_volume_24h", `${context}.meteora`),
           discovery_min_tvl: optionalNumber(meteora, "discovery_min_tvl", `${context}.meteora`),
-          quote_mint: optionalString(meteora, "quote_mint", `${context}.meteora`)
+          quote_mint: optionalString(meteora, "quote_mint", `${context}.meteora`),
+          pool_detail_path: optionalString(meteora, "pool_detail_path", `${context}.meteora`)
         }
       : undefined
   };

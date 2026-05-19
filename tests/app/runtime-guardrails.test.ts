@@ -26,6 +26,16 @@ function createRpcManager(canWrite: boolean, lastError?: string) {
   };
 }
 
+function enableStrictLivePreflightConfig(config: ReturnType<typeof createAgentConfig>): void {
+  config.cost_model = {
+    ...config.cost_model,
+    enabled: true
+  };
+  config.risk.filters = {
+    enabled: true
+  };
+}
+
 test("resolveRuntimeGuardrails 在未配置时返回兼容默认值", () => {
   const config = createAgentConfig();
   delete config.guardrails;
@@ -45,6 +55,7 @@ test("enforceRuntimeGuardrails 会在 live preflight 下拒绝未加载钱包", 
   config.guardrails = {
     require_live_preflight: true
   };
+  enableStrictLivePreflightConfig(config);
 
   await assert.rejects(
     enforceRuntimeGuardrails(config, {
@@ -64,6 +75,7 @@ test("enforceRuntimeGuardrails 会校验 active_address 与 signer 一致", asyn
   config.guardrails = {
     require_live_preflight: true
   };
+  enableStrictLivePreflightConfig(config);
 
   const secret = JSON.stringify(Array.from({ length: 32 }, (_, index) => index + 1));
   const signer = loadKeypairFromSecret(secret);
@@ -106,6 +118,7 @@ test("enforceRuntimeGuardrails 会在 live preflight 下拒绝不可写 RPC", as
   config.guardrails = {
     require_live_preflight: true
   };
+  enableStrictLivePreflightConfig(config);
 
   const secret = JSON.stringify(Array.from({ length: 32 }, (_, index) => index + 1));
   const signer = loadKeypairFromSecret(secret);
@@ -133,6 +146,7 @@ test("enforceRuntimeGuardrails 会在主数据源不可用时拒绝启动", asyn
   config.guardrails = {
     require_live_preflight: true
   };
+  enableStrictLivePreflightConfig(config);
 
   const secret = JSON.stringify(Array.from({ length: 32 }, (_, index) => index + 1));
   const signer = loadKeypairFromSecret(secret);
@@ -165,6 +179,7 @@ test("enforceRuntimeGuardrails 会在 execution dependency 校验失败时拒绝
   config.guardrails = {
     require_live_preflight: true
   };
+  enableStrictLivePreflightConfig(config);
 
   const secret = JSON.stringify(Array.from({ length: 32 }, (_, index) => index + 1));
   const signer = loadKeypairFromSecret(secret);
@@ -203,6 +218,7 @@ test("enforceRuntimeGuardrails 会校验活跃仓位与 signer / 链上账户一
   config.guardrails = {
     require_live_preflight: true
   };
+  enableStrictLivePreflightConfig(config);
 
   const secret = JSON.stringify(Array.from({ length: 32 }, (_, index) => index + 1));
   const signer = loadKeypairFromSecret(secret);

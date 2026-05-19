@@ -51,6 +51,12 @@ function hasValidQueryToken(request: Request, expectedToken: string): boolean {
   return typeof token === "string" && token.length > 0 ? isExpectedToken(token, expectedToken) : false;
 }
 
+function renderPrometheusMetrics(context: Context, runtime: AppRuntime) {
+  return context.text(runtime.metricsService.renderPrometheus(), 200, {
+    "Content-Type": "text/plain; version=0.0.4; charset=utf-8"
+  });
+}
+
 function isLoopbackHost(host: string): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
 }
@@ -292,8 +298,17 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
     });
   });
 
+  app.get("/dashboard/prometheus", async (context) => {
+    const unauthorized = requireApiAuth(context);
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    return renderPrometheusMetrics(context, runtime);
+  });
+
   app.get("/health", async (context) => {
-    const status = controlService.getStatus();
+    const status = await controlService.getStatus();
     const ok = runtime.executionLayer.getStatus().healthy && runtime.rpcManager.getHealth().canWrite && !runtime.state.getLastPersistError();
     return context.json({
       ok,
@@ -307,7 +322,7 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
       return unauthorized;
     }
 
-    return context.json(controlService.getStatus());
+    return context.json(await controlService.getStatus());
   });
 
   app.get("/events/status", async (context) => {
@@ -347,15 +362,23 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
           controller.close();
         };
 
-        send("status", {
-          status: controlService.getStatus()
-        });
+        const sendStatus = () => {
+          void controlService
+            .getStatus()
+            .then((status) => {
+              send("status", {
+                status
+              });
+            })
+            .catch((error: unknown) => {
+              send("error", {
+                message: error instanceof Error ? error.message : "status_failed"
+              });
+            });
+        };
 
-        statusTimer = setInterval(() => {
-          send("status", {
-            status: controlService.getStatus()
-          });
-        }, 5_000);
+        sendStatus();
+        statusTimer = setInterval(sendStatus, 5_000);
 
         heartbeatTimer = setInterval(() => {
           send("ping", {
@@ -410,6 +433,15 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
     return context.json(controlService.getSkillOptimizationRecommendations());
   });
 
+  app.get("/skills/experiments", async (context) => {
+    const unauthorized = requireApiAuth(context);
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    return context.json(controlService.getStrategyExperiments());
+  });
+
   app.post("/skills/optimizer/evaluate", async (context) => {
     const unauthorized = requireApiAuth(context);
     if (unauthorized) {
@@ -417,6 +449,23 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
     }
 
     return context.json(controlService.evaluateSkillOptimizationRecommendations());
+  });
+
+  app.post("/skills/:id/optimizer/apply", async (context) => {
+    const unauthorized = requireApiAuth(context);
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    const body = await tryReadJsonBody(context.req.raw);
+    const version =
+      typeof body.version === "string" ? body.version : typeof body.skillVersion === "string" ? body.skillVersion : undefined;
+    const result = controlService.applySkillOptimizationRecommendation(context.req.param("id"), version);
+    if (!result) {
+      return context.json({ error: "skill/recommendation not found" }, 404);
+    }
+
+    return context.json(result);
   });
 
   app.get("/positions", async (context) => {
@@ -454,6 +503,15 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
         until: normalizeIsoQuery(context.req.query("until"))
       })
     );
+  });
+
+  app.get("/pnl/ledger", async (context) => {
+    const unauthorized = requireApiAuth(context);
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    return context.json(await controlService.getPnlLedger());
   });
 
   app.get("/paper-trading/snapshots", async (context) => {
@@ -575,6 +633,25 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
     return context.json(result);
   });
 
+  app.put("/skills/:id/config", async (context) => {
+    const unauthorized = requireApiAuth(context);
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    const body = await tryReadJsonBody(context.req.raw);
+    try {
+      const result = await controlService.updateSkillConfig(context.req.param("id"), body);
+      if (!result) {
+        return context.json({ error: "skill not found" }, 404);
+      }
+
+      return context.json(result);
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : "invalid skill config patch" }, 400);
+    }
+  });
+
   app.post("/skills/:id/rollback", async (context) => {
     const unauthorized = requireApiAuth(context);
     if (unauthorized) {
@@ -641,9 +718,7 @@ export function createApiApp(runtime: AppRuntime, options: ApiServerOptions): Ho
       return unauthorized;
     }
 
-    return context.text(runtime.metricsService.renderPrometheus(), 200, {
-      "Content-Type": "text/plain; version=0.0.4; charset=utf-8"
-    });
+    return renderPrometheusMetrics(context, runtime);
   });
 
   return app;

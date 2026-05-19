@@ -10,6 +10,7 @@ import type {
 import type { AgentConfig } from "../../config/types.js";
 import type { RPCManager } from "../../managers/rpc-manager.js";
 import { createId } from "../../utils/async.js";
+import { estimateActionCostSol } from "../../utils/cost-model.js";
 import type { Logger } from "../../utils/logger.js";
 import { estimateUsdFromSol } from "../../utils/valuation.js";
 
@@ -94,7 +95,9 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       throw new Error("open action 缺少必要字段");
     }
 
-    if (context.availableCapitalSol < action.amountSol) {
+    const cost = estimateActionCostSol(this.config, action.type, action.amountSol);
+    const totalSpendSol = action.amountSol + cost.totalSol;
+    if (context.availableCapitalSol < totalSpendSol) {
       throw new Error("可用资金不足，无法执行开仓");
     }
 
@@ -115,6 +118,7 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       pnlPercent: 0,
       isInRange: true,
       totalFeesClaimedSol: 0,
+      costsPaidSol: cost.totalSol,
       rebalanceCount: 0,
       status: "active",
       entryLincolnScore: action.pool.lincolnScore,
@@ -144,12 +148,13 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       metadata: {
         backend: "dry_run",
         positionId: position.id,
+        costEstimate: cost,
         rpcProvider: this.rpcManager.getActiveEndpoint().name
       },
       stateOperations: [
         {
           kind: "adjust_capital",
-          deltaSol: -action.amountSol
+          deltaSol: -totalSpendSol
         },
         {
           kind: "upsert_position",
@@ -179,15 +184,18 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       };
     }
 
-    const recoveredSol = hasPaperMark(this.config, position)
+    const grossRecoveredSol = hasPaperMark(this.config, position)
       ? currentPaperValueSol(position) + position.totalFeesClaimedSol
       : position.depositedSol * (1 + position.pnlPercent / 100) + position.totalFeesClaimedSol;
+    const cost = estimateActionCostSol(this.config, action.type, grossRecoveredSol);
+    const recoveredSol = Math.max(0, grossRecoveredSol - cost.totalSol);
     const closedPosition: PositionRecord = {
       ...position,
       status: "closed",
       closedAt: new Date(),
       isInRange: false,
       currentValueUsd: estimateUsdFromSol(this.config, recoveredSol),
+      costsPaidSol: (position.costsPaidSol ?? 0) + cost.totalSol,
       paper: position.paper
         ? {
             ...position.paper,
@@ -206,7 +214,9 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       metadata: {
         backend: "dry_run",
         positionId: position.id,
+        grossRecoveredSol,
         recoveredSol,
+        costEstimate: cost,
         rpcProvider: this.rpcManager.getActiveEndpoint().name
       },
       stateOperations: [
@@ -231,6 +241,7 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       throw new Error(`待重平衡仓位不存在: ${action.positionId}`);
     }
 
+    const cost = estimateActionCostSol(this.config, action.type, context.position.depositedSol);
     const updatedPosition: PositionRecord = {
       ...context.position,
       fromBinId: action.newRange.minBinId,
@@ -238,7 +249,8 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       rebalanceCount: context.position.rebalanceCount + 1,
       isInRange: true,
       outOfRangeSince: undefined,
-      currentValueUsd: estimateUsdFromSol(this.config, context.position.depositedSol)
+      currentValueUsd: estimateUsdFromSol(this.config, context.position.depositedSol),
+      costsPaidSol: (context.position.costsPaidSol ?? 0) + cost.totalSol
     };
 
     return {
@@ -251,9 +263,18 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       metadata: {
         backend: "dry_run",
         positionId: context.position.id,
+        costEstimate: cost,
         rpcProvider: this.rpcManager.getActiveEndpoint().name
       },
       stateOperations: [
+        ...(cost.totalSol > 0
+          ? [
+              {
+                kind: "adjust_capital" as const,
+                deltaSol: -cost.totalSol
+              }
+            ]
+          : []),
         {
           kind: "upsert_position",
           position: updatedPosition
@@ -273,11 +294,13 @@ export class DryRunExecutionBackend implements IExecutionBackend {
 
     const paperEnabled = hasPaperMark(this.config, context.position);
     const claimedFee = paperEnabled ? (context.position.paper?.unclaimedFeesSol ?? 0) : 0.02;
+    const cost = estimateActionCostSol(this.config, action.type, claimedFee);
     const claimTimestamp = new Date();
     const paperValueAfterClaim = paperEnabled ? Math.max(0, currentPaperValueSol(context.position) - claimedFee) : undefined;
     const updatedPosition: PositionRecord = {
       ...context.position,
       totalFeesClaimedSol: context.position.totalFeesClaimedSol + claimedFee,
+      costsPaidSol: (context.position.costsPaidSol ?? 0) + cost.totalSol,
       currentValueUsd: paperValueAfterClaim !== undefined
         ? estimateUsdFromSol(this.config, paperValueAfterClaim)
         : context.position.currentValueUsd,
@@ -306,9 +329,19 @@ export class DryRunExecutionBackend implements IExecutionBackend {
       metadata: {
         backend: "dry_run",
         positionId: context.position.id,
+        claimedFee,
+        costEstimate: cost,
         rpcProvider: this.rpcManager.getActiveEndpoint().name
       },
       stateOperations: [
+        ...(cost.totalSol > 0
+          ? [
+              {
+                kind: "adjust_capital" as const,
+                deltaSol: claimedFee - cost.totalSol
+              }
+            ]
+          : []),
         {
           kind: "upsert_position",
           position: updatedPosition

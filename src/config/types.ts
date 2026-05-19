@@ -146,12 +146,59 @@ export interface PaperTradingConfig {
   snapshot_retention?: number;
 }
 
+export interface CostModelConfig {
+  enabled?: boolean;
+  network_fee_lamports?: number;
+  priority_fee_lamports?: number;
+  jito_tip_lamports?: number;
+  rent_per_position_sol?: number;
+  slippage_bps?: number;
+  rebalance_slippage_bps?: number;
+  failed_tx_fee_lamports?: number;
+}
+
 export interface SkillOptimizerConfig {
   enabled?: boolean;
   min_closed_positions?: number;
   min_snapshots?: number;
   evaluation_interval_ms?: number;
   max_patch_pct?: number;
+  auto_apply?: boolean;
+  min_auto_apply_confidence?: number;
+  min_auto_apply_closed_positions?: number;
+  auto_apply_actions?: string[];
+}
+
+export interface RiskFilterConfig {
+  enabled?: boolean;
+  min_tvl?: number;
+  min_volume_24h?: number;
+  max_fee_tvl_ratio_24h?: number;
+  min_safety_score?: number;
+  max_top_holder_pct?: number;
+  max_rug_probability?: number;
+  min_smart_money_net?: number;
+  max_bundler_rate?: number;
+  max_bot_degen_rate?: number;
+  reject_dev_sell?: boolean;
+  reject_stale_data?: boolean;
+}
+
+export interface CanaryKillSwitchConfig {
+  enabled?: boolean;
+  max_daily_loss_sol?: number;
+  max_daily_loss_pct?: number;
+  max_position_loss_pct?: number;
+  max_consecutive_failures?: number;
+  max_pending_action_age_ms?: number;
+  max_stale_position_count?: number;
+}
+
+export interface CanaryConfig {
+  enabled?: boolean;
+  max_concurrent_positions?: number;
+  max_position_sol?: number;
+  kill_switch?: CanaryKillSwitchConfig;
 }
 
 export interface AgentConfig {
@@ -200,7 +247,9 @@ export interface AgentConfig {
     live?: LiveExecutionConfig;
   };
   paper_trading?: PaperTradingConfig;
+  cost_model?: CostModelConfig;
   skill_optimizer?: SkillOptimizerConfig;
+  canary?: CanaryConfig;
   guardrails?: RuntimeGuardrailsConfig;
   storage?: StorageConfig;
   data_providers: {
@@ -224,6 +273,7 @@ export interface AgentConfig {
     daily_max_loss_pct: number;
     fee_claim_interval_hours: number;
     lincoln_exit_threshold: number;
+    filters?: RiskFilterConfig;
   };
   notifications: {
     telegram?: NotificationRouteConfig;
@@ -241,5 +291,6 @@ export interface AgentConfig {
     discovery_min_volume_24h?: number;
     discovery_min_tvl?: number;
     quote_mint?: string;
+    pool_detail_path?: string;
   };
 }

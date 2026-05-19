@@ -32,6 +32,7 @@ export interface IDataProvider {
 export interface IPoolSource {
   readonly name: string;
   discoverPools(): Promise<PoolCandidate[]>;
+  getPool?(address: string): Promise<PoolCandidate | undefined>;
   healthCheck(): Promise<ProviderHealthStatus>;
 }
 

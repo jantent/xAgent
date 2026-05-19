@@ -81,12 +81,39 @@ paper_trading:
   max_out_of_range_penalty_pct: 35
   snapshot_retention: 5000
 
+cost_model:
+  enabled: true
+  network_fee_lamports: 5000
+  priority_fee_lamports: 100000
+  jito_tip_lamports: 10000
+  rent_per_position_sol: 0.0025
+  slippage_bps: 80
+  rebalance_slippage_bps: 120
+  failed_tx_fee_lamports: 5000
+
 skill_optimizer:
   enabled: false
   min_closed_positions: 5
   min_snapshots: 20
   evaluation_interval_ms: 1800000
   max_patch_pct: 20
+  auto_apply: false
+  min_auto_apply_confidence: 0.8
+  min_auto_apply_closed_positions: 15
+  auto_apply_actions: ["tighten", "reduce_risk"]
+
+canary:
+  enabled: false
+  max_concurrent_positions: 1
+  max_position_sol: 0.2
+  kill_switch:
+    enabled: true
+    max_daily_loss_sol: 0.2
+    max_daily_loss_pct: 2.0
+    max_position_loss_pct: 15.0
+    max_consecutive_failures: 2
+    max_pending_action_age_ms: 90000
+    max_stale_position_count: 0
 
 guardrails:
   allow_mock_data: false
@@ -177,6 +204,19 @@ risk:
   daily_max_loss_pct: 3.0
   fee_claim_interval_hours: 8
   lincoln_exit_threshold: 2.0
+  filters:
+    enabled: true
+    min_tvl: 5000
+    min_volume_24h: 10000
+    max_fee_tvl_ratio_24h: 200
+    min_safety_score: 70
+    max_top_holder_pct: 25
+    max_rug_probability: 20
+    min_smart_money_net: -10000
+    max_bundler_rate: 25
+    max_bot_degen_rate: 40
+    reject_dev_sell: true
+    reject_stale_data: true
 
 notifications:
   telegram:

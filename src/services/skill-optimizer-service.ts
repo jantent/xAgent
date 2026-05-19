@@ -5,6 +5,7 @@ import type {
   PositionRecord,
   SkillMeta,
   SkillOptimizationRecommendation,
+  SkillOptimizationSuggestedAction,
   SkillRuntimeStats
 } from "../domain/models.js";
 import type { SkillManager } from "../managers/skill-manager.js";
@@ -18,6 +19,17 @@ interface SkillEvidence {
 }
 
 const STALE_RATIO_LIMIT = 0.35;
+
+export interface AppliedSkillOptimization {
+  skillId: string;
+  skillVersion: string;
+  suggestedAction: SkillOptimizationSuggestedAction;
+  confidence: number;
+  patch: {
+    params?: NonNullable<SkillOptimizationRecommendation["paramsPatch"]>;
+    riskLimits?: NonNullable<SkillOptimizationRecommendation["riskLimitsPatch"]>;
+  };
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -57,8 +69,7 @@ function buildHold(
 }
 
 /**
- * SkillOptimizerService 只生成建议，不改 Skill 参数。
- * 它刻意只依赖本地 dry_run / paper trading 结果，避免 live 路径被自动学习逻辑影响。
+ * SkillOptimizerService 默认只生成建议；只有配置显式开启 auto_apply 时，才会在 dry_run 下自动应用高置信度 patch。
  */
 export class SkillOptimizerService {
   constructor(
@@ -108,12 +119,78 @@ export class SkillOptimizerService {
     return recommendations;
   }
 
+  applyEligibleRecommendations(
+    recommendations = this.listRecommendations()
+  ): AppliedSkillOptimization[] {
+    if (this.config.skill_optimizer?.auto_apply !== true || this.getDisabledReason()) {
+      return [];
+    }
+
+    const minConfidence = this.config.skill_optimizer.min_auto_apply_confidence ?? 0.7;
+    const minClosedPositions = this.config.skill_optimizer.min_auto_apply_closed_positions ?? 10;
+    const allowedActions = new Set(
+      this.config.skill_optimizer.auto_apply_actions ?? ["tighten", "widen", "reduce_risk"]
+    );
+    const closedCountBySkill = new Map<string, number>();
+    for (const position of this.state.getAllPositions()) {
+      if (position.status === "active") {
+        continue;
+      }
+
+      const key = `${position.skillId}:${position.skillVersion}`;
+      closedCountBySkill.set(key, (closedCountBySkill.get(key) ?? 0) + 1);
+    }
+
+    const applied: AppliedSkillOptimization[] = [];
+    for (const recommendation of recommendations) {
+      const paramsPatch = recommendation.paramsPatch ?? {};
+      const riskLimitsPatch = recommendation.riskLimitsPatch ?? {};
+      const hasPatch = Object.keys(paramsPatch).length > 0 || Object.keys(riskLimitsPatch).length > 0;
+      const closedCount = closedCountBySkill.get(`${recommendation.skillId}:${recommendation.skillVersion}`) ?? 0;
+      if (
+        recommendation.disabledReason ||
+        !hasPatch ||
+        recommendation.confidence < minConfidence ||
+        closedCount < minClosedPositions ||
+        !allowedActions.has(recommendation.suggestedAction)
+      ) {
+        continue;
+      }
+
+      const skill = this.skillManager.patchSkillConfig(
+        recommendation.skillId,
+        {
+          params: recommendation.paramsPatch,
+          riskLimits: recommendation.riskLimitsPatch
+        },
+        recommendation.skillVersion
+      );
+      if (!skill) {
+        continue;
+      }
+
+      applied.push({
+        skillId: recommendation.skillId,
+        skillVersion: recommendation.skillVersion,
+        suggestedAction: recommendation.suggestedAction,
+        confidence: recommendation.confidence,
+        patch: {
+          ...(Object.keys(paramsPatch).length > 0 ? { params: paramsPatch } : {}),
+          ...(Object.keys(riskLimitsPatch).length > 0 ? { riskLimits: riskLimitsPatch } : {})
+        }
+      });
+    }
+
+    return applied;
+  }
+
   getSummary(): Record<string, unknown> {
     const disabledReason = this.getDisabledReason();
     const recommendations = this.listRecommendations();
     return {
       enabled: !disabledReason,
       disabledReason,
+      autoApply: this.config.skill_optimizer?.auto_apply === true && !disabledReason,
       recommendationCount: recommendations.length,
       lastEvaluatedAt: recommendations.reduce<Date | undefined>(
         (latest, item) => (!latest || item.evaluatedAt.getTime() > latest.getTime() ? item.evaluatedAt : latest),

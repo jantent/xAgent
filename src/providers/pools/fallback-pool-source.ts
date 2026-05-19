@@ -38,6 +38,32 @@ export class FallbackPoolSource implements IPoolSource {
     return [];
   }
 
+  async getPool(address: string): Promise<PoolCandidate | undefined> {
+    let lastError: unknown;
+
+    for (const source of this.sources) {
+      try {
+        const pool = source.getPool
+          ? await source.getPool(address)
+          : (await source.discoverPools()).find((item) => item.address === address);
+        if (pool) {
+          return pool;
+        }
+
+        this.logger.warn("池子回查源未返回目标池，尝试降级", { source: source.name, address });
+      } catch (error) {
+        lastError = error;
+        this.logger.warn("池子回查源调用失败，尝试降级", { source: source.name, address, error });
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+
+    return undefined;
+  }
+
   async healthCheck(): Promise<ProviderHealthStatus> {
     const statuses: ProviderHealthStatus[] = [];
 

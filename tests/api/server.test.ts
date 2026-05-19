@@ -4,7 +4,7 @@ import test from "node:test";
 import type { AppRuntime } from "../../src/app/runtime.js";
 import { createApiApp, startApiServer } from "../../src/api/server.js";
 import type { AuditEventQuery, AuditEventRecord } from "../../src/audit/contracts.js";
-import type { PaperPositionSnapshot } from "../../src/domain/models.js";
+import type { PaperPositionSnapshot, SkillOptimizationRecommendation } from "../../src/domain/models.js";
 import { SystemMode } from "../../src/domain/models.js";
 import { createAgentConfig, createPositionRecord, createSkill } from "../helpers/factories.js";
 
@@ -40,6 +40,7 @@ interface RuntimeStubOptions {
   positions?: ReturnType<typeof createPositionRecord>[];
   auditEvents?: AuditEventRecord[];
   paperSnapshots?: PaperPositionSnapshot[];
+  recommendations?: SkillOptimizationRecommendation[];
 }
 
 function assertApprox(actual: number, expected: number, tolerance = 1e-9): void {
@@ -55,12 +56,12 @@ function createRuntimeStub(options: RuntimeStubOptions = {}): AppRuntime {
   const skills = [createSkill()];
   const auditEvents = options.auditEvents ?? [];
   const calls = options.calls ?? [];
-  const recommendations = [
+  const recommendations: SkillOptimizationRecommendation[] = options.recommendations ?? [
     {
       skillId: "bread_n_butter",
       skillVersion: "1.0.0",
       evaluatedAt: new Date("2026-01-01T00:02:00.000Z"),
-      suggestedAction: "hold",
+      suggestedAction: "hold" as const,
       confidence: 0,
       reason: "样本不足。"
     }
@@ -170,6 +171,32 @@ function createRuntimeStub(options: RuntimeStubOptions = {}): AppRuntime {
         skill.params = {
           ...skill.params,
           ...patch
+        } as never;
+        return skill;
+      },
+      patchSkillConfig(
+        skillId: string,
+        patch: { params?: Record<string, unknown>; riskLimits?: Record<string, unknown> },
+        version?: string
+      ) {
+        calls.push(
+          `patch:${skillId}:${version ?? ""}:params=${Object.keys(patch.params ?? {}).sort().join(",")}:risk=${Object.keys(
+            patch.riskLimits ?? {}
+          )
+            .sort()
+            .join(",")}`
+        );
+        const skill = skills.find((item) => item.id === skillId && (version ? item.version === version : true));
+        if (!skill) {
+          return null;
+        }
+        skill.params = {
+          ...skill.params,
+          ...patch.params
+        } as never;
+        skill.riskLimits = {
+          ...skill.riskLimits,
+          ...patch.riskLimits
         } as never;
         return skill;
       },
@@ -455,6 +482,25 @@ test("GET /portfolio/report 返回区间盈亏日历和交易次数", async () =
         inRange: true,
         source: "meteora_http",
         stale: false
+      },
+      {
+        id: "paper-outlier",
+        positionId: position.id,
+        skillId: position.skillId,
+        skillVersion: position.skillVersion,
+        poolAddress: position.poolAddress,
+        tokenMint: position.tokenMint,
+        tokenSymbol: position.tokenSymbol,
+        timestamp: new Date(`${today}T00:12:00.000Z`),
+        activeBinId: 8_001,
+        valueSol: 100_000,
+        valueUsd: 10_000_000,
+        pnlPercent: 9_999_900,
+        feeAccruedSol: 0,
+        unclaimedFeesSol: 0,
+        inRange: true,
+        source: "meteora_http",
+        stale: false
       }
     ],
     auditEvents: [
@@ -481,6 +527,11 @@ test("GET /portfolio/report 返回区间盈亏日历和交易次数", async () =
   assertApprox(payload.summary.totalPnlSol, 0.2);
   assertApprox(todayBucket.pnlSol, 0.2);
   assert.equal(todayBucket.tradeCount, 1);
+  assert.equal(todayBucket.snapshotCount, 3);
+  assert.equal(todayBucket.rejectedSnapshotCount, 1);
+  assert.equal(payload.summary.dataQuality.snapshotCount, 3);
+  assert.equal(payload.summary.dataQuality.rejectedSnapshotCount, 1);
+  assert.equal(payload.summary.dataQuality.hasRejectedSnapshots, true);
 });
 
 test("GET /trades 返回交易历史和已实现盈亏统计", async () => {
@@ -545,6 +596,88 @@ test("GET /trades 返回交易历史和已实现盈亏统计", async () => {
   assert.equal(payload.summary.total, 1);
   assertApprox(payload.summary.totalRealizedPnlSol, 0.25);
   assert.equal(payload.summary.winningTrades, 1);
+});
+
+test("GET /pnl/ledger 返回按仓位归集的账本盈亏", async () => {
+  const closedPosition = createPositionRecord({
+    id: "closed-ledger",
+    status: "closed",
+    depositedSol: 1,
+    costsPaidSol: 0.01,
+    closedAt: new Date("2026-01-03T00:00:00.000Z")
+  });
+  const runtime = createRuntimeStub({
+    positions: [closedPosition],
+    auditEvents: [
+      {
+        source: "actions",
+        timestamp: "2026-01-03T00:00:00.000Z",
+        payload: {
+          cycleId: "cycle-ledger",
+          action: {
+            id: "action-open",
+            type: "open"
+          },
+          result: {
+            actionId: "action-open",
+            status: "success",
+            stateOperations: [{ kind: "upsert_position", position: closedPosition }]
+          }
+        }
+      },
+      {
+        source: "actions",
+        timestamp: "2026-01-03T00:01:00.000Z",
+        payload: {
+          cycleId: "cycle-ledger",
+          action: {
+            id: "action-close",
+            type: "close",
+            positionId: "closed-ledger"
+          },
+          result: {
+            actionId: "action-close",
+            status: "success",
+            metadata: {
+              recoveredSol: 1.2,
+              positionId: "closed-ledger"
+            },
+            stateOperations: [
+              { kind: "adjust_capital", deltaSol: 1.2 },
+              { kind: "upsert_position", position: closedPosition }
+            ]
+          }
+        }
+      }
+    ]
+  });
+
+  const response = await requestApi("/pnl/ledger", undefined, "127.0.0.1", runtime);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+
+  assert.equal(payload.positions[0].positionId, "closed-ledger");
+  assert.equal(payload.positions[0].completeness, "complete");
+  assertApprox(payload.positions[0].realizedPnlSol, 0.2);
+  assertApprox(payload.summary.realizedPnlSol, 0.2);
+  assert.equal(payload.summary.missingCloseActionCount, 0);
+  assert.equal(payload.summary.partialPositionCount, 0);
+
+  const statusResponse = await requestApi("/status", undefined, "127.0.0.1", runtime);
+  assert.equal(statusResponse.status, 200);
+  const statusPayload = await statusResponse.json();
+  assertApprox(statusPayload.pnlLedger.realizedPnlSol, payload.summary.realizedPnlSol);
+  assertApprox(statusPayload.pnlLedger.totalPnlSol, payload.summary.totalPnlSol);
+  assert.equal(statusPayload.pnlLedger.missingCloseActionCount, payload.summary.missingCloseActionCount);
+});
+
+test("GET /skills/experiments 返回策略实验状态", async () => {
+  const response = await requestApi("/skills/experiments", undefined);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+
+  assert.equal(payload.experiments[0].skillId, "bread_n_butter");
+  assert.equal(payload.summary.total, 1);
 });
 
 test("GET /positions 支持状态、搜索、排序和分页", async () => {
@@ -681,6 +814,27 @@ test("startApiServer 会保护 /status 但保留 /health 无鉴权", async () =>
   );
 });
 
+test("Dashboard Prometheus 文本端点复用 Bearer Token 认证", async () => {
+  await withEnv(
+    {
+      XAGENT_API_TOKEN: "metrics-token"
+    },
+    async () => {
+      const unauthorized = await requestApi("/dashboard/prometheus", undefined);
+      assert.equal(unauthorized.status, 401);
+
+      const authorized = await requestApi("/dashboard/prometheus", {
+        headers: {
+          Authorization: "Bearer metrics-token"
+        }
+      });
+      assert.equal(authorized.status, 200);
+      assert.match(authorized.headers.get("content-type") ?? "", /text\/plain/);
+      assert.match(await authorized.text(), /xagent_test 1/);
+    }
+  );
+});
+
 test("startApiServer 允许 SSE 路由使用 query token", async () => {
   await withEnv(
     {
@@ -734,6 +888,8 @@ test("control mutation 路由会调用 orchestrator 和 execution layer", async 
 
       const resume = await requestApi("/control/resume", { method: "POST" }, "127.0.0.1", runtime);
       assert.equal(resume.status, 200);
+      const resumePayload = await resume.json();
+      assert.equal(resumePayload.resumed, true);
 
       const cycle = await requestApi("/control/run-main-cycle", { method: "POST" }, "127.0.0.1", runtime);
       assert.equal(cycle.status, 200);
@@ -747,6 +903,7 @@ test("control mutation 路由会调用 orchestrator 和 execution layer", async 
       assert.deepEqual(calls, [
         "pause:test_pause",
         "resume",
+        "runMainCycle",
         "runMainCycle",
         "execute:close:position-1",
         "pause:emergency_exit_all",
@@ -797,6 +954,42 @@ test("skill mutation 路由支持 enable、params、rollback 且缺失 skill 返
       const paramsPayload = await params.json();
       assert.equal(paramsPayload.skill.params.binCount, 24);
 
+      const config = await requestApi(
+        "/skills/bread_n_butter/config",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            version: "1.0.0",
+            params: { binCount: 55 },
+            riskLimits: { stopLossPercent: 16, maxAliveHours: 58 }
+          })
+        },
+        "127.0.0.1",
+        runtime
+      );
+      assert.equal(config.status, 200);
+      const configPayload = await config.json();
+      assert.equal(configPayload.skill.params.binCount, 55);
+      assert.equal(configPayload.skill.riskLimits.stopLossPercent, 16);
+      assert.equal(configPayload.skill.riskLimits.maxAliveHours, 58);
+
+      const invalidConfig = await requestApi(
+        "/skills/bread_n_butter/config",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ riskLimits: { stopLossPercent: 120 } })
+        },
+        "127.0.0.1",
+        runtime
+      );
+      assert.equal(invalidConfig.status, 400);
+
       const rollback = await requestApi(
         "/skills/bread_n_butter/rollback",
         {
@@ -817,6 +1010,7 @@ test("skill mutation 路由支持 enable、params、rollback 且缺失 skill 返
       assert.deepEqual(calls, [
         "enable:bread_n_butter:25",
         "params:bread_n_butter:binCount",
+        "patch:bread_n_butter:1.0.0:params=binCount:risk=maxAliveHours,stopLossPercent",
         "rollback:bread_n_butter:1.0.0",
         "disable:missing"
       ]);
@@ -844,6 +1038,60 @@ test("skill optimizer 路由返回建议并支持手动评估", async () => {
       const evaluatePayload = await evaluate.json();
       assert.equal(evaluatePayload.recommendations[0].suggestedAction, "hold");
       assert.deepEqual(calls, ["optimizer:evaluate"]);
+    }
+  );
+});
+
+test("skill optimizer apply 路由会应用 params 和 riskLimits patch", async () => {
+  await withEnv(
+    {
+      XAGENT_API_TOKEN: undefined
+    },
+    async () => {
+      const calls: string[] = [];
+      const runtime = createRuntimeStub({
+        calls,
+        recommendations: [
+          {
+            skillId: "bread_n_butter",
+            skillVersion: "1.0.0",
+            evaluatedAt: new Date("2026-01-01T00:03:00.000Z"),
+            suggestedAction: "reduce_risk",
+            confidence: 0.9,
+            reason: "收缩风险参数。",
+            paramsPatch: {
+              binCount: 55
+            },
+            riskLimitsPatch: {
+              stopLossPercent: 16,
+              maxAliveHours: 58
+            }
+          }
+        ]
+      });
+
+      const apply = await requestApi(
+        "/skills/bread_n_butter/optimizer/apply",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ version: "1.0.0" })
+        },
+        "127.0.0.1",
+        runtime
+      );
+      assert.equal(apply.status, 200);
+      const payload = await apply.json();
+      assert.equal(payload.applied, true);
+      assert.equal(payload.skill.params.binCount, 55);
+      assert.equal(payload.skill.riskLimits.stopLossPercent, 16);
+      assert.equal(payload.skill.riskLimits.maxAliveHours, 58);
+
+      const missing = await requestApi("/skills/missing/optimizer/apply", { method: "POST" }, "127.0.0.1", runtime);
+      assert.equal(missing.status, 404);
+      assert.deepEqual(calls, ["patch:bread_n_butter:1.0.0:params=binCount:risk=maxAliveHours,stopLossPercent"]);
     }
   );
 });

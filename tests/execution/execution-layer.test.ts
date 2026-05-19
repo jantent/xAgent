@@ -229,6 +229,77 @@ test("ExecutionLayer 在 close_only 下会拒绝 open / claim / rebalance", asyn
   assert.equal(executed, false);
 });
 
+test("ExecutionLayer 在手工暂停下仍允许 close / emergency_exit", async () => {
+  const position = createPositionRecord({
+    id: "position-paused-exit",
+    depositedSol: 1.2
+  });
+  const state = new SharedState({
+    initialSnapshot: {
+      manualPause: true,
+      lastPauseReason: "emergency_exit_all",
+      availableCapitalSol: 5,
+      allPositions: [position]
+    }
+  });
+  const metrics = createMetricsServiceSpy();
+  const executedTypes: string[] = [];
+  const backend = {
+    getStatus() {
+      return {
+        mode: "dry_run" as const,
+        backend: "fake",
+        dryRun: true,
+        healthy: true,
+        supportedActions: ["close" as const, "emergency_exit" as const],
+        submissionStrategy: "gateway_managed" as const
+      };
+    },
+    async execute(action: ReturnType<typeof createOpenAction>) {
+      executedTypes.push(action.type);
+      const closed = {
+        ...position,
+        status: "closed" as const,
+        closedAt: new Date("2026-01-01T01:00:00.000Z")
+      };
+      return {
+        actionId: action.id,
+        type: action.type,
+        status: "success" as const,
+        message: "closed",
+        txSignatures: ["tx-close"],
+        latencyMs: 1,
+        stateOperations: [
+          {
+            kind: "adjust_capital" as const,
+            deltaSol: 1.2
+          },
+          {
+            kind: "upsert_position" as const,
+            position: closed
+          }
+        ]
+      };
+    }
+  };
+
+  const layer = new ExecutionLayer(state, metrics as never, backend, createTestLogger());
+  const skipped = await layer.execute(createOpenAction());
+  const exited = await layer.execute({
+    id: "action-emergency-exit-1",
+    type: "emergency_exit",
+    trigger: "manual",
+    reason: "通过 API 触发全仓紧急撤出",
+    positionId: position.id
+  });
+
+  assert.equal(skipped.status, "skipped");
+  assert.match(skipped.message, /暂停/);
+  assert.equal(exited.status, "success");
+  assert.deepEqual(executedTypes, ["emergency_exit"]);
+  assert.equal(state.getPosition(position.id)?.status, "closed");
+});
+
 test("ExecutionLayer 会在执行前无法持久化 pending action 时阻断真实执行", async () => {
   let executed = false;
   const state = new SharedState({

@@ -89,6 +89,48 @@ test("RiskSentinel.review 会消费全局单仓和日累计限额", () => {
   assert.match(reviewed[0]?.rejectionReason ?? "", /单仓敞口|日限额/);
 });
 
+test("RiskSentinel.review 会执行硬过滤拒绝高风险池子", () => {
+  const config = createAgentConfig();
+  config.risk.max_position_pct = 100;
+  config.risk.filters = {
+    enabled: true,
+    min_tvl: 10_000,
+    min_volume_24h: 10_000,
+    min_safety_score: 70,
+    max_top_holder_pct: 25,
+    reject_dev_sell: true,
+    reject_stale_data: true
+  };
+  const skill = createSkill({
+    riskLimits: {
+      maxPositionSizePercent: 100
+    }
+  });
+  const sentinel = new RiskSentinel(config, new SkillManager([skill]), createTestLogger());
+  const plan = createPlan({
+    pool: {
+      tvl: 50_000,
+      vol24h: 80_000,
+      safetyScore: 72,
+      meta: {
+        topHolderPct: 40
+      }
+    },
+    skill: {
+      id: skill.id,
+      version: skill.version,
+      riskLimits: {
+        maxPositionSizePercent: 100
+      }
+    }
+  });
+
+  const reviewed = sentinel.review([plan], createStateSnapshot({ availableCapitalSol: 10 }), SystemMode.NORMAL);
+
+  assert.equal(reviewed[0]?.approved, false);
+  assert.match(reviewed[0]?.rejectionReason ?? "", /top holder/);
+});
+
 test("RiskSentinel.inspectActivePositions 会生成止损、超时和平衡动作", () => {
   const config = createAgentConfig();
   config.risk.stop_loss_pct = 25;

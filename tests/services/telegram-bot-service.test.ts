@@ -6,7 +6,7 @@ import type { AuditEventQuery, AuditEventRecord } from "../../src/audit/contract
 import { SystemMode } from "../../src/domain/models.js";
 import { TelegramBotService } from "../../src/services/telegram-bot-service.js";
 import { rootLogger } from "../../src/utils/logger.js";
-import { createAgentConfig, createPositionRecord } from "../helpers/factories.js";
+import { createAgentConfig, createPositionRecord, createSkill } from "../helpers/factories.js";
 
 function createRuntimeStub(): AppRuntime {
   const config = createAgentConfig();
@@ -46,16 +46,44 @@ function createRuntimeStub(): AppRuntime {
     startedAt: new Date("2026-01-01T00:00:00.000Z"),
     mode: SystemMode.NORMAL,
     manualPause: false,
+    lastPauseReason: undefined,
     availableCapitalSol: 10,
     activePositions: positions.filter((position) => position.status === "active"),
     allPositions: positions,
+    lastMainCycleAt: new Date("2026-01-03T00:00:00.000Z"),
+    lastHighFreqTickAt: new Date("2026-01-03T00:01:00.000Z"),
+    lastCycleResult: undefined,
     pendingActions: [],
     runtimeSkills: [],
     paperPositionSnapshots: []
   };
+  const skills = [createSkill()];
+  const recommendations = [
+    {
+      skillId: "bread_n_butter",
+      skillVersion: "1.0.0",
+      evaluatedAt: new Date("2026-01-03T00:00:00.000Z"),
+      suggestedAction: "hold" as const,
+      confidence: 0.7,
+      reason: "样本稳定。"
+    }
+  ];
 
   return {
     config,
+    poolSourceName: "mock_meteora",
+    storage: {
+      stateStoreKind: "file",
+      auditStoreKind: "file",
+      cacheStoreKind: "memory",
+      sqliteConfigured: false
+    },
+    wallet: {
+      activeAddress: config.wallet.active_address,
+      secretLoaded: false,
+      allowSecretForwarding: false
+    },
+    lock: null,
     state: {
       getSnapshot() {
         return snapshot;
@@ -70,6 +98,53 @@ function createRuntimeStub(): AppRuntime {
         return undefined;
       }
     },
+    skillManager: {
+      listAll() {
+        return skills;
+      }
+    },
+    skillStatsService: {
+      listStats() {
+        return [
+          {
+            skillId: "bread_n_butter",
+            skillVersion: "1.0.0",
+            totalPositions: 2,
+            activePositions: 1,
+            closedPositions: 1,
+            estimatedPnlUsd: 12,
+            activeMarkPnlUsd: 4,
+            averagePositionHours: 8,
+            winRate: 50,
+            worstPnlPercent: -3,
+            maxDrawdownPercent: 3,
+            updatedAt: new Date("2026-01-03T00:00:00.000Z")
+          }
+        ];
+      },
+      enrichSkills(items: unknown[]) {
+        return items.map((item) => ({
+          ...(item as Record<string, unknown>),
+          stats: this.listStats()[0]
+        }));
+      }
+    },
+    skillOptimizerService: {
+      listRecommendations() {
+        return recommendations;
+      },
+      evaluateAndStore() {
+        return recommendations;
+      },
+      getSummary() {
+        return {
+          enabled: true,
+          autoApply: false,
+          recommendationCount: recommendations.length,
+          lastEvaluatedAt: recommendations[0]?.evaluatedAt
+        };
+      }
+    },
     executionLayer: {
       getStatus() {
         return {
@@ -80,6 +155,11 @@ function createRuntimeStub(): AppRuntime {
           supportedActions: ["open", "close", "rebalance", "claim", "emergency_exit"],
           submissionStrategy: "gateway_managed"
         };
+      }
+    },
+    orchestrator: {
+      isRunning() {
+        return false;
       }
     },
     rpcManager: {
@@ -171,6 +251,30 @@ test("TelegramBotService 只读命令返回状态、页面、仓位和事件", a
   const events = await service.handleTextForTest("12345", "/events actions rkc");
   assert.match(events, /source=actions/);
   assert.match(events, /closed RKC/);
+});
+
+test("TelegramBotService 查询命令覆盖 Dashboard 主要只读视图", async () => {
+  const service = createService();
+
+  const infra = await service.handleTextForTest("12345", "/infra");
+  assert.match(infra, /\[xAgent\] 基础设施/);
+  assert.match(infra, /storage state=file audit=file cache=memory/);
+
+  const trades = await service.handleTextForTest("12345", "/trades close success rkc");
+  assert.match(trades, /\[xAgent\] 交易历史 action=close status=success q=rkc/);
+  assert.match(trades, /RKC/);
+
+  const report = await service.handleTextForTest("12345", "/report 7");
+  assert.match(report, /\[xAgent\] 资产报告 7天/);
+  assert.match(report, /snapshots=0/);
+
+  const skills = await service.handleTextForTest("12345", "/skills bread");
+  assert.match(skills, /\[xAgent\] Skill 摘要 · bread/);
+  assert.match(skills, /bread_n_butter@1\.0\.0/);
+
+  const optimizer = await service.handleTextForTest("12345", "/optimizer");
+  assert.match(optimizer, /\[xAgent\] Optimizer 建议/);
+  assert.match(optimizer, /bread_n_butter@1\.0\.0/);
 });
 
 test("TelegramBotService 未授权 chat 只能查看 chat_id", async () => {

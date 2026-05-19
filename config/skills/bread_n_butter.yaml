@@ -2,12 +2,12 @@ id: "bread_n_butter"
 version: "2.1.0"
 name: "Bread 'n Butter"
 description: "适用于已进入 Hype 或 Plateau 阶段的主流 meme 池，优先做单边 SOL below 策略。"
-status: "active"
+status: "disabled"
 canaryPercent: 0
 params:
   direction: "below"
   distributionType: "Spot"
-  binCount: 69
+  binCount: 2
   binStepPreference: [80, 100]
   feeRatePreference: [0.02, 0.05]
   entryConditions:
@@ -37,8 +37,8 @@ riskLimits:
   maxPositionSizePercent: 2
   maxTotalExposurePercent: 10
   maxConcurrentPositions: 10
-  stopLossPercent: 20
-  maxAliveHours: 72
+  stopLossPercent: 3
+  maxAliveHours: 2
   maxDailyRebalances: 6
 applicability:
   minLincolnScore: 1.5
@@ -46,7 +46,7 @@ applicability:
   minMcap: 500000
   maxMcap: 50000000
   lifecycleStages: ["hype", "plateau"]
-changelog: "初始版本，作为系统默认主策略。"
+changelog: "线上 dry-run 样本胜率和回撤不达标，暂停调度并保留收缩后的风险参数。"
 previousVersion: ~
 createdAt: "2026-03-28T00:00:00.000Z"
 updatedAt: "2026-03-28T00:00:00.000Z"

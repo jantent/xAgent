@@ -1,10 +1,13 @@
 import type { AppRuntime } from "../app/runtime.js";
 import type { AuditEventRecord } from "../audit/contracts.js";
-import type { PositionRecord, PositionStatus } from "../domain/models.js";
+import type { ActionType, PositionRecord, PositionStatus } from "../domain/models.js";
+import { ControlService } from "./control-service.js";
 import type { Logger } from "../utils/logger.js";
 
 const POSITION_STATUSES = new Set<PositionStatus>(["active", "closed", "closing", "error"]);
 const AUDIT_SOURCES = new Set(["actions", "errors", "phases", "cycles", "llm"]);
+const TRADE_ACTION_TYPES = new Set<ActionType>(["open", "close", "rebalance", "claim", "noop", "emergency_exit"]);
+const TRADE_STATUSES = new Set(["success", "failed", "skipped"]);
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 
 export interface TelegramBotServiceOptions {
@@ -61,6 +64,26 @@ interface TelegramReplyMarkup {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readDateLike(value: unknown): Date | string | undefined {
+  return value instanceof Date || typeof value === "string" ? value : undefined;
 }
 
 function compactLines(lines: Array<string | undefined | null | false>): string {
@@ -177,10 +200,15 @@ function buildHelpText(): string {
   return [
     "[xAgent] Telegram 控制面",
     "",
-    "/status - 查看运行状态",
+    "/status - 查看运行状态与 KPI",
+    "/infra - 查看执行/RPC/数据源/存储/钱包",
     "/dashboard - 打开 Dashboard 页面",
     "/positions [active|closed|all|closing|error] [关键词] - 查询仓位",
     "/position <id|symbol|mint|pool> - 查看单仓详情",
+    "/trades [open|close|rebalance|claim|emergency_exit|noop] [success|failed|skipped] [关键词] - 查询交易历史",
+    "/report [7|30|90] - 查看资产报告",
+    "/skills [关键词] - 查看 Skill/实验/Optimizer 摘要",
+    "/optimizer - 查看参数优化建议",
     "/events [actions|errors|phases|cycles|llm] [关键词] - 查询最近审计事件",
     "/id - 查看当前 Telegram chat_id"
   ].join("\n");
@@ -188,6 +216,7 @@ function buildHelpText(): string {
 
 export class TelegramBotService {
   private readonly allowedChatIds: Set<string>;
+  private readonly controlService: ControlService;
   private running = false;
   private loopPromise?: Promise<void>;
   private nextUpdateOffset?: number;
@@ -199,6 +228,7 @@ export class TelegramBotService {
     private readonly options: TelegramBotServiceOptions
   ) {
     this.allowedChatIds = new Set(options.allowedChatIds.map((chatId) => chatId.trim()).filter(Boolean));
+    this.controlService = new ControlService(runtime);
   }
 
   start(): void {
@@ -305,7 +335,11 @@ export class TelegramBotService {
       ? "/positions active"
       : callback.data === "events_recent"
         ? "/events"
-        : `/${callback.data}`;
+        : callback.data === "trades_recent"
+          ? "/trades"
+          : callback.data === "skills_summary"
+            ? "/skills"
+            : `/${callback.data}`;
     const response = await this.renderCommand(chatId, command);
     await this.answerCallbackQuery(callback.id, "已刷新");
     if (response) {
@@ -332,7 +366,9 @@ export class TelegramBotService {
       case "help":
         return buildHelpText();
       case "status":
-        return this.renderStatus();
+        return await this.renderStatus();
+      case "infra":
+        return await this.renderInfra();
       case "dashboard":
       case "page":
         return this.renderDashboard();
@@ -340,6 +376,17 @@ export class TelegramBotService {
         return this.renderPositions(parsed.args);
       case "position":
         return this.renderPosition(parsed.args);
+      case "trades":
+      case "trade":
+        return await this.renderTrades(parsed.args);
+      case "report":
+      case "portfolio":
+        return await this.renderReport(parsed.args);
+      case "skills":
+      case "skill":
+        return await this.renderSkills(parsed.args);
+      case "optimizer":
+        return this.renderOptimizer();
       case "events":
         return await this.renderEvents(parsed.args);
       default:
@@ -368,6 +415,11 @@ export class TelegramBotService {
       [
         { text: "状态", callback_data: "status" },
         { text: "活跃仓位", callback_data: "positions_active" },
+        { text: "交易", callback_data: "trades_recent" }
+      ],
+      [
+        { text: "Skill", callback_data: "skills_summary" },
+        { text: "基础设施", callback_data: "infra" },
         { text: "最近事件", callback_data: "events_recent" }
       ]
     ];
@@ -381,12 +433,13 @@ export class TelegramBotService {
     };
   }
 
-  private renderStatus(): string {
-    const snapshot = this.runtime.state.getSnapshot();
-    const execution = this.runtime.executionLayer.getStatus();
-    const rpc = this.runtime.rpcManager.getHealth();
-    const dataProviders = this.runtime.dataProviderManager.getHealthSnapshot();
-    const paperTrading = this.runtime.paperTradingService.getSummary();
+  private async renderStatus(): Promise<string> {
+    const status = await this.controlService.getStatus();
+    const portfolio = readRecord(status.portfolio);
+    const pnlLedger = readRecord(status.pnlLedger);
+    const execution = readRecord(status.execution);
+    const canary = readRecord(status.canary);
+    const paperTrading = readRecord(status.paperTrading);
     const activePositions = this.runtime.state.getActivePositions();
     const averagePnl =
       activePositions.length > 0
@@ -395,17 +448,40 @@ export class TelegramBotService {
 
     return compactLines([
       "[xAgent] 状态",
-      `mode=${snapshot.mode}${snapshot.manualPause ? " manual_paused" : ""}`,
-      `execution=${execution.mode}/${execution.backend} healthy=${execution.healthy ? "yes" : "no"}`,
-      `capital=${formatNumber(snapshot.availableCapitalSol, 4)} SOL`,
-      `positions=${snapshot.activePositions.length}/${snapshot.allPositions.length} active/total avg_pnl=${formatSignedPercent(averagePnl)}`,
-      `rpc=${rpc.activeName} write=${rpc.canWrite ? "yes" : "no"}`,
-      `data_providers=${dataProviders.hasAnyProvider ? "online" : "offline"} primary=${dataProviders.hasPrimaryProvider ? "yes" : "no"}`,
-      `paper=${paperTrading.enabled ? "on" : "off"} snapshots=${paperTrading.snapshotCount} stale=${paperTrading.stalePositions}`,
-      `last_main=${formatDate(snapshot.lastMainCycleAt)}`,
-      `last_tick=${formatDate(snapshot.lastHighFreqTickAt)}`,
-      snapshot.lastPauseReason ? `pause_reason=${snapshot.lastPauseReason}` : undefined,
+      `mode=${readString(status.mode) ?? "n/a"}${readBoolean(status.manualPause) ? " manual_paused" : ""}`,
+      `execution=${readString(execution.mode) ?? "n/a"}/${readString(execution.backend) ?? "n/a"} healthy=${readBoolean(execution.healthy) ? "yes" : "no"}`,
+      `capital=${formatNumber(readNumber(status.availableCapitalSol), 4)} SOL`,
+      `positions=${formatNumber(readNumber(status.activePositions), 0)}/${formatNumber(readNumber(status.totalPositions), 0)} active/total avg_pnl=${formatSignedPercent(averagePnl)}`,
+      `portfolio value=${formatNumber(readNumber(portfolio.totalCurrentValueSol), 4)} SOL exposure=${formatNumber(readNumber(portfolio.exposurePercent), 2)}%`,
+      `pnl=${formatNumber(readNumber(pnlLedger.totalPnlSol), 4)} SOL ${formatSignedPercent(readNumber(pnlLedger.totalPnlPercent))}`,
+      `canary=${readBoolean(canary.enabled) ? "on" : "off"} stale_active=${formatNumber(readNumber(canary.staleActivePositions), 0)}`,
+      `paper=${readBoolean(paperTrading.enabled) ? "on" : "off"} snapshots=${formatNumber(readNumber(paperTrading.snapshotCount), 0)} stale=${formatNumber(readNumber(paperTrading.stalePositions), 0)}`,
+      `last_main=${formatDate(readDateLike(status.lastMainCycleAt))}`,
+      `last_tick=${formatDate(readDateLike(status.lastHighFreqTickAt))}`,
+      readString(status.lastPauseReason) ? `pause_reason=${readString(status.lastPauseReason)}` : undefined,
       this.runtime.state.getLastPersistError() ? `persist_error=${this.runtime.state.getLastPersistError()}` : undefined
+    ]);
+  }
+
+  private async renderInfra(): Promise<string> {
+    const status = await this.controlService.getStatus();
+    const execution = readRecord(status.execution);
+    const rpc = readRecord(status.rpc);
+    const dataProviders = readRecord(status.dataProviders);
+    const storage = readRecord(status.storage);
+    const runtimeLock = readRecord(status.runtimeLock);
+    const wallet = readRecord(status.wallet);
+
+    return compactLines([
+      "[xAgent] 基础设施",
+      `execution=${readString(execution.mode) ?? "n/a"}/${readString(execution.backend) ?? "n/a"} healthy=${readBoolean(execution.healthy) ? "yes" : "no"}`,
+      `rpc=${readString(rpc.activeName) ?? "n/a"} write=${readBoolean(rpc.canWrite) ? "yes" : "no"}`,
+      `data_providers=${readBoolean(dataProviders.hasAnyProvider) ? "online" : "offline"} primary=${readBoolean(dataProviders.hasPrimaryProvider) ? "yes" : "no"}`,
+      `storage state=${readString(storage.stateStoreKind) ?? "n/a"} audit=${readString(storage.auditStoreKind) ?? "n/a"} cache=${readString(storage.cacheStoreKind) ?? "n/a"}`,
+      `sqlite=${readBoolean(storage.sqliteConfigured) ? "configured" : "off"} pool_source=${readString(status.poolSource) ?? "n/a"}`,
+      `lock=${readString(runtimeLock.kind) ?? "off"} pid=${formatNumber(readNumber(runtimeLock.pid), 0)} host=${readString(runtimeLock.hostname) ?? "n/a"}`,
+      `wallet=${readBoolean(wallet.secretLoaded) ? "SECRET_LOADED" : "ADDRESS_ONLY"} address=${readString(wallet.activeAddress) ?? "n/a"}`,
+      readString(status.statePersistenceError) ? `persist_error=${readString(status.statePersistenceError)}` : undefined
     ]);
   }
 
@@ -493,6 +569,124 @@ export class TelegramBotService {
       `Pool ${position.poolAddress}`,
       `Mint ${position.tokenMint}`,
       `Position ${position.positionPubkey}`
+    ]);
+  }
+
+  private async renderTrades(args: string[]): Promise<string> {
+    const first = args[0]?.toLowerCase();
+    const actionType = first && TRADE_ACTION_TYPES.has(first as ActionType) ? (first as ActionType) : undefined;
+    const second = args[actionType ? 1 : 0]?.toLowerCase();
+    const status = second && TRADE_STATUSES.has(second) ? second : undefined;
+    const queryStart = (actionType ? 1 : 0) + (status ? 1 : 0);
+    const query = args.slice(queryStart).join(" ").trim();
+    const payload = await this.controlService.getTradeHistory({
+      limit: Math.max(1, this.options.maxEvents),
+      offset: 0,
+      actionType,
+      status: status as "success" | "failed" | "skipped" | undefined,
+      token: query || undefined
+    });
+    const summary = readRecord(payload.summary);
+    const trades = Array.isArray(payload.trades) ? payload.trades.filter(isRecord) : [];
+    const lines = trades.map((trade, index) => {
+      const pnl = readNumber(trade.realizedPnlPercent);
+      const capital = readNumber(trade.recoveredSol) ?? readNumber(trade.depositedSol) ?? readNumber(trade.capitalDeltaSol);
+      return [
+        `${index + 1}. ${readString(trade.actionType) ?? "action"} ${readString(trade.status) ?? "n/a"} | ${readString(trade.tokenSymbol) ?? "n/a"} | PnL ${formatSignedPercent(pnl)}`,
+        `   ${formatNumber(capital, 4)} SOL | ${readString(trade.skillId) ?? "n/a"} | ${formatDate(readDateLike(trade.timestamp))}`,
+        readString(trade.message) ? `   ${readString(trade.message)}` : undefined
+      ].filter(Boolean).join("\n");
+    });
+
+    return compactLines([
+      `[xAgent] 交易历史${actionType ? ` action=${actionType}` : ""}${status ? ` status=${status}` : ""}${query ? ` q=${query}` : ""}`,
+      `total=${formatNumber(readNumber(summary.total), 0)} success=${formatNumber(readNumber(summary.success), 0)} failed=${formatNumber(readNumber(summary.failed), 0)} skipped=${formatNumber(readNumber(summary.skipped), 0)}`,
+      `realized=${formatNumber(readNumber(summary.totalRealizedPnlSol), 4)} SOL avg=${formatSignedPercent(readNumber(summary.averageRealizedPnlPercent))} fees=${formatNumber(readNumber(summary.totalFeesClaimedSol), 4)} SOL`,
+      lines.length > 0 ? lines.join("\n") : "没有匹配交易。"
+    ]);
+  }
+
+  private async renderReport(args: string[]): Promise<string> {
+    const requestedDays = Number(args[0]);
+    const days = requestedDays === 30 || requestedDays === 90 ? requestedDays : 7;
+    const payload = await this.controlService.getPortfolioReport({
+      days,
+      timezoneOffsetMinutes: new Date().getTimezoneOffset()
+    });
+    const range = readRecord(payload.range);
+    const summary = readRecord(payload.summary);
+    const dataQuality = readRecord(summary.dataQuality);
+    const bestDay = readRecord(summary.bestDay);
+    const worstDay = readRecord(summary.worstDay);
+    const current = readRecord(summary.current);
+
+    return compactLines([
+      `[xAgent] 资产报告 ${formatNumber(readNumber(range.days), 0)}天`,
+      `${readString(range.startDate) ?? "n/a"} .. ${readString(range.endDate) ?? "n/a"}`,
+      `pnl=${formatNumber(readNumber(summary.totalPnlSol), 4)} SOL ${formatSignedPercent(readNumber(summary.totalPnlPercent))} / $${formatNumber(readNumber(summary.totalPnlUsd), 2)}`,
+      `trades=${formatNumber(readNumber(summary.tradeCount), 0)} data_days=${formatNumber(readNumber(summary.dataDays), 0)} +days=${formatNumber(readNumber(summary.positiveDays), 0)} -days=${formatNumber(readNumber(summary.negativeDays), 0)}`,
+      `current value=${formatNumber(readNumber(current.totalCurrentValueSol), 4)} SOL exposure=${formatNumber(readNumber(current.exposurePercent), 2)}%`,
+      readString(bestDay.date) ? `best=${readString(bestDay.date)} ${formatNumber(readNumber(bestDay.pnlSol), 4)} SOL` : undefined,
+      readString(worstDay.date) ? `worst=${readString(worstDay.date)} ${formatNumber(readNumber(worstDay.pnlSol), 4)} SOL` : undefined,
+      `snapshots=${formatNumber(readNumber(dataQuality.snapshotCount), 0)} stale=${formatNumber(readNumber(dataQuality.staleSnapshotCount), 0)} rejected=${formatNumber(readNumber(dataQuality.rejectedSnapshotCount), 0)}`
+    ]);
+  }
+
+  private async renderSkills(args: string[]): Promise<string> {
+    const query = args.join(" ").trim().toLowerCase();
+    const skills = this.runtime.skillStatsService
+      .enrichSkills(this.runtime.skillManager.listAll())
+      .filter((skill) => {
+        if (!query) {
+          return true;
+        }
+        return `${skill.id} ${skill.name} ${skill.version} ${skill.status} ${skill.description ?? ""}`.toLowerCase().includes(query);
+      });
+    const recommendations = readRecord(this.controlService.getSkillOptimizationRecommendations());
+    const recommendationItems = Array.isArray(recommendations.recommendations)
+      ? recommendations.recommendations.filter(isRecord)
+      : [];
+    const experiments = readRecord(this.controlService.getStrategyExperiments());
+    const experimentItems = Array.isArray(experiments.experiments) ? experiments.experiments.filter(isRecord) : [];
+    const limit = Math.max(1, this.options.maxPositions);
+    const lines = skills.slice(0, limit).map((skill, index) => {
+      const stats = readRecord(skill.stats);
+      const recommendation = recommendationItems.find((item) => item.skillId === skill.id && item.skillVersion === skill.version);
+      const experiment = experimentItems.find((item) => item.skillId === skill.id && item.skillVersion === skill.version);
+      return [
+        `${index + 1}. ${skill.id}@${skill.version} | ${skill.status} | canary=${formatNumber(skill.canaryPercent, 0)}%`,
+        `   positions=${formatNumber(readNumber(stats.totalPositions), 0)} win=${formatNumber(readNumber(stats.winRate), 1)}% pnl=$${formatNumber(readNumber(stats.estimatedPnlUsd), 2)} experiment=${readString(experiment?.status) ?? "n/a"}`,
+        recommendation ? `   optimizer=${readString(recommendation.suggestedAction) ?? "hold"}${readString(recommendation.disabledReason) ? ` disabled=${readString(recommendation.disabledReason)}` : ""}` : undefined
+      ].filter(Boolean).join("\n");
+    });
+
+    return compactLines([
+      `[xAgent] Skill 摘要${query ? ` · ${query}` : ""}`,
+      `${skills.length} matched / ${Math.min(skills.length, limit)} showing`,
+      lines.length > 0 ? lines.join("\n") : "没有匹配 Skill。"
+    ]);
+  }
+
+  private renderOptimizer(): string {
+    const payload = readRecord(this.controlService.getSkillOptimizationRecommendations());
+    const summary = readRecord(payload.summary);
+    const recommendations = Array.isArray(payload.recommendations) ? payload.recommendations.filter(isRecord) : [];
+    const limit = Math.max(1, this.options.maxEvents);
+    const lines = recommendations.slice(0, limit).map((recommendation, index) => {
+      const paramsPatch = readRecord(recommendation.paramsPatch);
+      const riskLimitsPatch = readRecord(recommendation.riskLimitsPatch);
+      const patchKeys = [...Object.keys(paramsPatch), ...Object.keys(riskLimitsPatch)];
+      return [
+        `${index + 1}. ${readString(recommendation.skillId) ?? "n/a"}@${readString(recommendation.skillVersion) ?? "n/a"} | ${readString(recommendation.suggestedAction) ?? "hold"}`,
+        `   confidence=${formatNumber(readNumber(recommendation.confidence), 2)} patch=${patchKeys.join(", ") || "none"}${readString(recommendation.disabledReason) ? ` disabled=${readString(recommendation.disabledReason)}` : ""}`
+      ].join("\n");
+    });
+
+    return compactLines([
+      "[xAgent] Optimizer 建议",
+      `summary enabled=${readBoolean(summary.enabled) ? "yes" : "no"} total=${formatNumber(readNumber(summary.recommendationCount), 0)} auto_apply=${readBoolean(summary.autoApply) ? "yes" : "no"}`,
+      readString(summary.disabledReason) ? `disabled_reason=${readString(summary.disabledReason)}` : undefined,
+      lines.length > 0 ? lines.join("\n") : "当前没有优化建议。"
     ]);
   }
 

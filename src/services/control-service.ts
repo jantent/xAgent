@@ -1,7 +1,14 @@
 import type { AppRuntime } from "../app/runtime.js";
 import type { AuditEventRecord } from "../audit/contracts.js";
 import type { SharedStateSnapshot } from "../core/shared-state.js";
-import type { ActionType, PaperPositionSnapshot, PlannedAction, PositionRecord } from "../domain/models.js";
+import type {
+  ActionType,
+  PaperPositionSnapshot,
+  PlannedAction,
+  PositionRecord,
+  SkillParams,
+  SkillRiskLimits
+} from "../domain/models.js";
 import { createId } from "../utils/async.js";
 import { rootLogger } from "../utils/logger.js";
 
@@ -45,11 +52,102 @@ interface TradeHistoryItem {
   realizedPnlPercent?: number;
   feesClaimedSol?: number;
   totalFeesClaimedSol?: number;
+  costsPaidSol?: number;
   valueUsd?: number;
   txSignatures: string[];
   latencyMs?: number;
   message?: string;
   backend?: string;
+}
+
+interface SkillConfigPatch {
+  version?: string;
+  params?: Partial<SkillParams>;
+  riskLimits?: Partial<SkillRiskLimits>;
+}
+
+interface NumberPatchOptions {
+  min: number;
+  max: number;
+  integer?: boolean;
+}
+
+const PARAM_NUMBER_FIELDS = {
+  binCount: { min: 1, max: 500, integer: true }
+} satisfies Partial<Record<keyof SkillParams, NumberPatchOptions>>;
+
+const RISK_NUMBER_FIELDS = {
+  maxPositionSizePercent: { min: 0.01, max: 100 },
+  maxTotalExposurePercent: { min: 0.01, max: 100 },
+  maxConcurrentPositions: { min: 1, max: 100, integer: true },
+  stopLossPercent: { min: 1, max: 95 },
+  maxAliveHours: { min: 1, max: 720, integer: true },
+  maxDailyRebalances: { min: 0, max: 100, integer: true }
+} satisfies Record<keyof SkillRiskLimits, NumberPatchOptions>;
+
+const ALLOWED_DIRECTIONS = new Set(["below", "above", "both"]);
+const ALLOWED_DISTRIBUTIONS = new Set(["Spot", "Curve", "BidAsk"]);
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeNumberPatchValue(value: unknown, key: string, options: NumberPatchOptions): number {
+  const numeric = typeof value === "number" ? value : typeof value === "string" && value.trim().length > 0 ? Number(value) : NaN;
+  if (!Number.isFinite(numeric)) {
+    throw new Error(`${key} 必须是数字。`);
+  }
+
+  const normalized = options.integer ? Math.trunc(numeric) : numeric;
+  if (normalized < options.min || normalized > options.max) {
+    throw new Error(`${key} 必须在 ${options.min} 到 ${options.max} 之间。`);
+  }
+
+  return normalized;
+}
+
+function normalizeSkillConfigPatch(rawPatch: Record<string, unknown>): SkillConfigPatch {
+  const paramsPatch: Partial<SkillParams> = {};
+  const riskLimitsPatch: Partial<SkillRiskLimits> = {};
+  const rawParams = isObjectRecord(rawPatch.params) ? rawPatch.params : {};
+  const rawRiskLimits = isObjectRecord(rawPatch.riskLimits) ? rawPatch.riskLimits : {};
+
+  if (rawParams.direction !== undefined) {
+    if (typeof rawParams.direction !== "string" || !ALLOWED_DIRECTIONS.has(rawParams.direction)) {
+      throw new Error("params.direction 必须是 below、above 或 both。");
+    }
+    paramsPatch.direction = rawParams.direction as SkillParams["direction"];
+  }
+
+  if (rawParams.distributionType !== undefined) {
+    if (typeof rawParams.distributionType !== "string" || !ALLOWED_DISTRIBUTIONS.has(rawParams.distributionType)) {
+      throw new Error("params.distributionType 必须是 Spot、Curve 或 BidAsk。");
+    }
+    paramsPatch.distributionType = rawParams.distributionType as SkillParams["distributionType"];
+  }
+
+  for (const [key, options] of Object.entries(PARAM_NUMBER_FIELDS)) {
+    if (rawParams[key] !== undefined) {
+      (paramsPatch as Record<string, number>)[key] = normalizeNumberPatchValue(rawParams[key], `params.${key}`, options);
+    }
+  }
+
+  for (const [key, options] of Object.entries(RISK_NUMBER_FIELDS)) {
+    if (rawRiskLimits[key] !== undefined) {
+      (riskLimitsPatch as Record<string, number>)[key] = normalizeNumberPatchValue(
+        rawRiskLimits[key],
+        `riskLimits.${key}`,
+        options
+      );
+    }
+  }
+
+  const version = typeof rawPatch.version === "string" ? rawPatch.version : typeof rawPatch.skillVersion === "string" ? rawPatch.skillVersion : undefined;
+  return {
+    ...(version ? { version } : {}),
+    ...(Object.keys(paramsPatch).length > 0 ? { params: paramsPatch } : {}),
+    ...(Object.keys(riskLimitsPatch).length > 0 ? { riskLimits: riskLimitsPatch } : {})
+  };
 }
 
 interface ReportDayBucket {
@@ -61,12 +159,40 @@ interface ReportDayBucket {
   tradeCount: number;
   snapshotCount: number;
   staleSnapshotCount: number;
+  rejectedSnapshotCount: number;
   hasData: boolean;
+}
+
+interface PnlLedgerItem {
+  positionId: string;
+  tokenSymbol: string;
+  tokenMint: string;
+  poolAddress: string;
+  skillId: string;
+  skillVersion: string;
+  status: string;
+  depositedSol: number;
+  currentValueSol?: number;
+  recoveredSol?: number;
+  claimedFeesSol: number;
+  unclaimedFeesSol: number;
+  costsPaidSol: number;
+  realizedPnlSol?: number;
+  unrealizedPnlSol?: number;
+  totalPnlSol: number;
+  pnlPercent: number;
+  openedAt: Date;
+  closedAt?: Date;
+  completeness: "complete" | "partial";
+  warnings: string[];
 }
 
 function readFiniteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
+
+const MAX_REPORT_MARK_MULTIPLIER = 5;
+const MAX_REPORT_MARK_PNL_PERCENT = 500;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -148,6 +274,23 @@ function snapshotUsdPerSol(snapshot: PaperPositionSnapshot): number | undefined 
   return snapshot.valueSol > 0 && Number.isFinite(snapshot.valueUsd) ? snapshot.valueUsd / snapshot.valueSol : undefined;
 }
 
+function isReportablePaperSnapshot(snapshot: PaperPositionSnapshot, position: PositionRecord | undefined): boolean {
+  if (snapshot.stale || !Number.isFinite(snapshot.valueSol) || snapshot.valueSol < 0 || !position) {
+    return false;
+  }
+
+  const depositedSol = Math.max(0, position.depositedSol);
+  if (depositedSol <= 0) {
+    return snapshot.valueSol === 0;
+  }
+
+  const pnlPercent = readFiniteNumber(snapshot.pnlPercent) ?? ((snapshot.valueSol - depositedSol) / depositedSol) * 100;
+  return (
+    snapshot.valueSol <= depositedSol * MAX_REPORT_MARK_MULTIPLIER &&
+    Math.abs(pnlPercent) <= MAX_REPORT_MARK_PNL_PERCENT
+  );
+}
+
 function readActionStatus(record: AuditEventRecord): string | undefined {
   const result = record.payload.result;
   if (!result || typeof result !== "object") {
@@ -192,6 +335,12 @@ function sumCapitalDelta(operations: Record<string, unknown>[]): number | undefi
   }
 
   return hasDelta ? total : undefined;
+}
+
+function readCostEstimate(result: Record<string, unknown>, position?: Record<string, unknown>): number | undefined {
+  const metadata = isRecord(result.metadata) ? result.metadata : {};
+  const costEstimate = isRecord(metadata.costEstimate) ? metadata.costEstimate : undefined;
+  return readFiniteNumber(costEstimate?.totalSol) ?? readFiniteNumber(position?.costsPaidSol);
 }
 
 function readTxSignatures(result: Record<string, unknown>): string[] {
@@ -249,6 +398,7 @@ function deriveTradeHistoryItem(event: AuditEventRecord): TradeHistoryItem | und
     realizedPnlPercent,
     feesClaimedSol,
     totalFeesClaimedSol: readFiniteNumber(position?.totalFeesClaimedSol),
+    costsPaidSol: readCostEstimate(result, position),
     valueUsd: readFiniteNumber(position?.currentValueUsd),
     txSignatures: readTxSignatures(result),
     latencyMs: readFiniteNumber(result.latencyMs),
@@ -380,6 +530,7 @@ function buildPortfolioReport(
         tradeCount: 0,
         snapshotCount: 0,
         staleSnapshotCount: 0,
+        rejectedSnapshotCount: 0,
         hasData: false
       }
     ])
@@ -397,7 +548,10 @@ function buildPortfolioReport(
       }
     }
 
-    if (paperSnapshot.stale || !Number.isFinite(paperSnapshot.valueSol)) {
+    if (!isReportablePaperSnapshot(paperSnapshot, positionById.get(paperSnapshot.positionId))) {
+      if (bucket && !paperSnapshot.stale) {
+        bucket.rejectedSnapshotCount += 1;
+      }
       continue;
     }
 
@@ -447,6 +601,9 @@ function buildPortfolioReport(
   const valuedDays = reportDays.filter((day) => day.hasData);
   const bestDay = valuedDays.length > 0 ? valuedDays.reduce((best, day) => (day.pnlSol > best.pnlSol ? day : best)) : undefined;
   const worstDay = valuedDays.length > 0 ? valuedDays.reduce((worst, day) => (day.pnlSol < worst.pnlSol ? day : worst)) : undefined;
+  const snapshotCount = reportDays.reduce((sum, day) => sum + day.snapshotCount, 0);
+  const staleSnapshotCount = reportDays.reduce((sum, day) => sum + day.staleSnapshotCount, 0);
+  const rejectedSnapshotCount = reportDays.reduce((sum, day) => sum + day.rejectedSnapshotCount, 0);
 
   return {
     range: {
@@ -467,9 +624,116 @@ function buildPortfolioReport(
       bestDay,
       worstDay,
       current: summarizePortfolio(snapshot, now),
-      valuationMethod: "paper_mark_to_market_estimate"
+      valuationMethod: "paper_mark_to_market_estimate",
+      dataQuality: {
+        snapshotCount,
+        staleSnapshotCount,
+        rejectedSnapshotCount,
+        hasRejectedSnapshots: rejectedSnapshotCount > 0,
+        note: "snapshot_pnl_is_not_account_equity"
+      }
     },
     days: reportDays
+  };
+}
+
+function buildPnlLedger(snapshot: SharedStateSnapshot, trades: TradeHistoryItem[]): Record<string, unknown> {
+  const closeTradesByPosition = new Map<string, TradeHistoryItem>();
+  const openTradesByPosition = new Map<string, TradeHistoryItem>();
+  for (const trade of trades) {
+    if (!trade.positionId || trade.status !== "success") {
+      continue;
+    }
+
+    if ((trade.actionType === "close" || trade.actionType === "emergency_exit") && !closeTradesByPosition.has(trade.positionId)) {
+      closeTradesByPosition.set(trade.positionId, trade);
+    }
+    if (trade.actionType === "open" && !openTradesByPosition.has(trade.positionId)) {
+      openTradesByPosition.set(trade.positionId, trade);
+    }
+  }
+
+  const positions = snapshot.allPositions.map<PnlLedgerItem>((position) => {
+    const closeTrade = closeTradesByPosition.get(position.id);
+    const openTrade = openTradesByPosition.get(position.id);
+    const claimedFeesSol = Math.max(0, readFiniteNumber(position.totalFeesClaimedSol) ?? 0);
+    const unclaimedFeesSol = Math.max(0, readFiniteNumber(position.paper?.unclaimedFeesSol) ?? 0);
+    const costsPaidSol = Math.max(0, readFiniteNumber(position.costsPaidSol) ?? 0);
+    const currentValueSol = position.status === "active" ? currentPositionValueSol(position) : undefined;
+    const recoveredSol =
+      position.status !== "active"
+        ? readFiniteNumber(closeTrade?.capitalDeltaSol) ?? readFiniteNumber(closeTrade?.recoveredSol)
+        : undefined;
+    const warnings: string[] = [];
+
+    if (!openTrade) {
+      warnings.push("missing_open_action");
+    }
+    if (position.status !== "active" && !closeTrade) {
+      warnings.push("missing_close_action");
+    }
+    if (position.status === "active" && position.paper?.staleReason) {
+      warnings.push("stale_mark");
+    }
+
+    const fallbackClosedValue = currentPositionValueSol(position) + claimedFeesSol - costsPaidSol;
+    const baseValue =
+      position.status === "active"
+        ? (currentValueSol ?? 0) + claimedFeesSol - costsPaidSol
+        : recoveredSol ?? fallbackClosedValue;
+    const totalPnlSol = baseValue - position.depositedSol;
+    const unrealizedPnlSol = position.status === "active" ? totalPnlSol : undefined;
+    const realizedPnlSol = position.status !== "active" ? totalPnlSol : undefined;
+
+    return {
+      positionId: position.id,
+      tokenSymbol: position.tokenSymbol,
+      tokenMint: position.tokenMint,
+      poolAddress: position.poolAddress,
+      skillId: position.skillId,
+      skillVersion: position.skillVersion,
+      status: position.status,
+      depositedSol: position.depositedSol,
+      currentValueSol,
+      recoveredSol,
+      claimedFeesSol,
+      unclaimedFeesSol,
+      costsPaidSol,
+      realizedPnlSol,
+      unrealizedPnlSol,
+      totalPnlSol,
+      pnlPercent: position.depositedSol > 0 ? (totalPnlSol / position.depositedSol) * 100 : 0,
+      openedAt: position.openedAt,
+      closedAt: position.closedAt,
+      completeness: warnings.length > 0 ? "partial" : "complete",
+      warnings
+    };
+  });
+
+  const realized = positions.filter((item) => item.status !== "active");
+  const unrealized = positions.filter((item) => item.status === "active");
+  const totalDepositedSol = positions.reduce((sum, item) => sum + item.depositedSol, 0);
+  const totalPnlSol = positions.reduce((sum, item) => sum + item.totalPnlSol, 0);
+
+  return {
+    positions,
+    summary: {
+      totalPositions: positions.length,
+      activePositions: unrealized.length,
+      closedPositions: realized.length,
+      partialPositions: positions.filter((item) => item.completeness === "partial").length,
+      totalDepositedSol,
+      realizedPnlSol: realized.reduce((sum, item) => sum + (item.realizedPnlSol ?? 0), 0),
+      unrealizedPnlSol: unrealized.reduce((sum, item) => sum + (item.unrealizedPnlSol ?? 0), 0),
+      totalPnlSol,
+      totalPnlPercent: totalDepositedSol > 0 ? (totalPnlSol / totalDepositedSol) * 100 : undefined,
+      claimedFeesSol: positions.reduce((sum, item) => sum + item.claimedFeesSol, 0),
+      unclaimedFeesSol: positions.reduce((sum, item) => sum + item.unclaimedFeesSol, 0),
+      costsPaidSol: positions.reduce((sum, item) => sum + item.costsPaidSol, 0),
+      warningCount: positions.reduce((sum, item) => sum + item.warnings.length, 0),
+      missingCloseActionCount: positions.filter((item) => item.warnings.includes("missing_close_action")).length,
+      partialPositionCount: positions.filter((item) => item.completeness === "partial").length
+    }
   };
 }
 
@@ -478,10 +742,22 @@ export class ControlService {
 
   constructor(private readonly runtime: AppRuntime) {}
 
-  getStatus(): Record<string, unknown> {
+  private async readPnlLedgerTrades(): Promise<TradeHistoryItem[]> {
+    const events = this.runtime.auditReader.queryEvents
+      ? await this.runtime.auditReader.queryEvents({
+          source: "actions",
+          limit: 5_000
+        })
+      : await this.runtime.auditReader.readRecent(5_000);
+
+    return events.map(deriveTradeHistoryItem).filter((item): item is TradeHistoryItem => Boolean(item));
+  }
+
+  async getStatus(): Promise<Record<string, unknown>> {
     const snapshot = this.runtime.state.getSnapshot();
     const rpcHealth = this.runtime.rpcManager.getHealth();
     const dataHealth = this.runtime.dataProviderManager.getHealthSnapshot();
+    const pnlLedger = buildPnlLedger(snapshot, await this.readPnlLedgerTrades());
 
     return {
       startedAt: snapshot.startedAt,
@@ -503,6 +779,18 @@ export class ControlService {
       statePersistenceError: this.runtime.state.getLastPersistError(),
       wallet: this.runtime.wallet,
       portfolio: summarizePortfolio(snapshot),
+      pnlLedger: pnlLedger.summary,
+      canary: {
+        enabled: this.runtime.config.canary?.enabled === true,
+        killSwitchEnabled: this.runtime.config.canary?.kill_switch?.enabled === true,
+        maxConcurrentPositions: this.runtime.config.canary?.max_concurrent_positions,
+        maxPositionSol: this.runtime.config.canary?.max_position_sol,
+        staleActivePositions: snapshot.activePositions.filter((position) => position.paper?.staleReason).length,
+        worstActivePnlPercent: snapshot.activePositions.reduce<number | undefined>(
+          (worst, position) => (worst === undefined || position.pnlPercent < worst ? position.pnlPercent : worst),
+          undefined
+        )
+      },
       execution: this.runtime.executionLayer.getStatus(),
       paperTrading: this.runtime.paperTradingService.getSummary(),
       skillOptimizer: this.runtime.skillOptimizerService.getSummary(),
@@ -583,6 +871,79 @@ export class ControlService {
     };
   }
 
+  async getPnlLedger(): Promise<Record<string, unknown>> {
+    return buildPnlLedger(this.runtime.state.getSnapshot(), await this.readPnlLedgerTrades());
+  }
+
+  getStrategyExperiments(): Record<string, unknown> {
+    const minClosed = this.runtime.config.skill_optimizer?.min_closed_positions ?? 5;
+    const recommendations = this.runtime.skillOptimizerService.listRecommendations();
+    const statsBySkill = new Map(
+      this.runtime.skillStatsService.listStats().map((stats) => [`${stats.skillId}:${stats.skillVersion}`, stats])
+    );
+    const snapshot = this.runtime.state.getSnapshot();
+    const experiments = this.runtime.skillManager.listAll().map((skill) => {
+      const stats = statsBySkill.get(`${skill.id}:${skill.version}`);
+      const positions = snapshot.allPositions.filter(
+        (position) => position.skillId === skill.id && position.skillVersion === skill.version
+      );
+      const snapshots = (snapshot.paperPositionSnapshots ?? []).filter(
+        (item) => item.skillId === skill.id && item.skillVersion === skill.version
+      );
+      const recommendation = recommendations.find(
+        (item) => item.skillId === skill.id && item.skillVersion === skill.version
+      );
+      const closedPositions = positions.filter((position) => position.status !== "active");
+      const staleRatio =
+        snapshots.length > 0 ? snapshots.filter((item) => item.stale).length / snapshots.length : 0;
+      const status =
+        staleRatio > 0.35
+          ? "blocked_data_quality"
+          : closedPositions.length < minClosed
+            ? "warming_up"
+            : (stats?.winRate ?? 0) < 45 && (stats?.estimatedPnlUsd ?? 0) < 0
+              ? "demote"
+              : (stats?.winRate ?? 0) >= 60 &&
+                  (stats?.estimatedPnlUsd ?? 0) > 0 &&
+                  (stats?.maxDrawdownPercent ?? 0) < skill.riskLimits.stopLossPercent * 0.5
+                ? "promote_canary"
+                : "hold";
+
+      return {
+        skillId: skill.id,
+        skillVersion: skill.version,
+        status,
+        lifecycleStatus: skill.status,
+        canaryPercent: skill.canaryPercent,
+        sample: {
+          totalPositions: positions.length,
+          closedPositions: closedPositions.length,
+          snapshots: snapshots.length,
+          staleRatio
+        },
+        stats,
+        recommendation,
+        rules: {
+          minClosedPositions: minClosed,
+          promote: "winRate>=60 && pnlUsd>0 && maxDrawdown<0.5*stopLoss",
+          demote: "winRate<45 && pnlUsd<0",
+          block: "staleRatio>35%"
+        }
+      };
+    });
+
+    return {
+      experiments,
+      summary: {
+        total: experiments.length,
+        promote: experiments.filter((item) => item.status === "promote_canary").length,
+        demote: experiments.filter((item) => item.status === "demote").length,
+        blocked: experiments.filter((item) => item.status === "blocked_data_quality").length,
+        warmingUp: experiments.filter((item) => item.status === "warming_up").length
+      }
+    };
+  }
+
   async pause(reason = "manual_api"): Promise<Record<string, unknown>> {
     await this.runtime.orchestrator.pause(reason);
     return this.getStatus();
@@ -590,7 +951,12 @@ export class ControlService {
 
   async resume(): Promise<Record<string, unknown>> {
     await this.runtime.orchestrator.resume();
-    return this.getStatus();
+    const cycle = await this.runtime.orchestrator.runMainCycle();
+    return {
+      resumed: true,
+      cycle,
+      status: await this.getStatus()
+    };
   }
 
   async forceExitPosition(positionId: string): Promise<Record<string, unknown>> {
@@ -607,7 +973,7 @@ export class ControlService {
     return {
       action,
       result,
-      status: this.getStatus()
+      status: await this.getStatus()
     };
   }
 
@@ -637,7 +1003,7 @@ export class ControlService {
     return {
       exitedPositions: positions.length,
       results,
-      status: this.getStatus()
+      status: await this.getStatus()
     };
   }
 
@@ -674,6 +1040,37 @@ export class ControlService {
     };
   }
 
+  async updateSkillConfig(skillId: string, rawPatch: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    const patch = normalizeSkillConfigPatch(rawPatch);
+    const hasPatch = Boolean(patch.params || patch.riskLimits);
+    if (!hasPatch) {
+      throw new Error("没有可保存的参数变更。");
+    }
+
+    const skill = this.runtime.skillManager.patchSkillConfig(
+      skillId,
+      {
+        params: patch.params,
+        riskLimits: patch.riskLimits
+      },
+      patch.version
+    );
+    if (!skill) {
+      return null;
+    }
+
+    this.logger.warn("已手动更新 Skill 参数", {
+      skillId,
+      skillVersion: skill.version,
+      params: patch.params ? Object.keys(patch.params) : [],
+      riskLimits: patch.riskLimits ? Object.keys(patch.riskLimits) : []
+    });
+    return {
+      skill,
+      patch
+    };
+  }
+
   async rollbackSkill(skillId: string, version?: string): Promise<Record<string, unknown> | null> {
     const skill = this.runtime.skillManager.rollback(skillId, version);
     if (!skill) {
@@ -682,6 +1079,53 @@ export class ControlService {
 
     return {
       skill
+    };
+  }
+
+  applySkillOptimizationRecommendation(skillId: string, version?: string): Record<string, unknown> | null {
+    const recommendation = this.runtime.skillOptimizerService
+      .listRecommendations()
+      .find((item) => item.skillId === skillId && (version ? item.skillVersion === version : true));
+    if (!recommendation) {
+      return null;
+    }
+
+    const paramsPatch = recommendation.paramsPatch ?? {};
+    const riskLimitsPatch = recommendation.riskLimitsPatch ?? {};
+    const hasPatch = Object.keys(paramsPatch).length > 0 || Object.keys(riskLimitsPatch).length > 0;
+    if (!hasPatch || recommendation.disabledReason) {
+      return {
+        applied: false,
+        reason: recommendation.disabledReason ?? "当前建议没有可应用的参数 patch。",
+        recommendation
+      };
+    }
+
+    const skill = this.runtime.skillManager.patchSkillConfig(
+      skillId,
+      {
+        params: paramsPatch,
+        riskLimits: riskLimitsPatch
+      },
+      recommendation.skillVersion
+    );
+    if (!skill) {
+      return null;
+    }
+
+    this.logger.warn("已应用 Skill Optimizer 建议", {
+      skillId,
+      skillVersion: recommendation.skillVersion,
+      suggestedAction: recommendation.suggestedAction
+    });
+    return {
+      applied: true,
+      skill,
+      recommendation,
+      patch: {
+        params: paramsPatch,
+        riskLimits: riskLimitsPatch
+      }
     };
   }
 

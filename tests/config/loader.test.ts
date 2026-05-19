@@ -79,6 +79,53 @@ test("loadAgentConfig 会解析 paper_trading 并补齐默认值", async () => {
     assert.equal(loaded.skill_optimizer?.min_closed_positions, 5);
     assert.equal(loaded.skill_optimizer?.min_snapshots, 20);
     assert.equal(loaded.skill_optimizer?.max_patch_pct, 20);
+    assert.equal(loaded.skill_optimizer?.auto_apply, false);
+    assert.equal(loaded.cost_model?.enabled, false);
+    assert.equal(loaded.cost_model?.rent_per_position_sol, 0.0025);
+    assert.equal(loaded.canary?.kill_switch?.max_stale_position_count, 1);
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("loadAgentConfig 会解析成本模型、硬过滤和自动优化配置", async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "xagent-config-"));
+  try {
+    const configPath = path.join(tmpDir, "agent.yaml");
+    const config = createAgentConfig();
+    config.cost_model = {
+      enabled: true,
+      network_fee_lamports: 6000,
+      priority_fee_lamports: 200000,
+      jito_tip_lamports: 15000,
+      rent_per_position_sol: 0.003,
+      slippage_bps: 90,
+      rebalance_slippage_bps: 130,
+      failed_tx_fee_lamports: 6000
+    };
+    config.skill_optimizer = {
+      ...config.skill_optimizer,
+      auto_apply: true,
+      min_auto_apply_confidence: 0.8,
+      min_auto_apply_closed_positions: 12,
+      auto_apply_actions: ["tighten", "reduce_risk"]
+    };
+    config.risk.filters = {
+      enabled: true,
+      min_tvl: 10_000,
+      min_volume_24h: 20_000,
+      max_top_holder_pct: 25,
+      reject_dev_sell: true
+    };
+    await writeFile(configPath, JSON.stringify(config));
+
+    const loaded = await loadAgentConfig(configPath);
+    assert.equal(loaded.cost_model?.enabled, true);
+    assert.equal(loaded.cost_model?.priority_fee_lamports, 200000);
+    assert.equal(loaded.skill_optimizer?.auto_apply, true);
+    assert.deepEqual(loaded.skill_optimizer?.auto_apply_actions, ["tighten", "reduce_risk"]);
+    assert.equal(loaded.risk.filters?.enabled, true);
+    assert.equal(loaded.risk.filters?.max_top_holder_pct, 25);
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
   }

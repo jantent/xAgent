@@ -196,3 +196,27 @@ test("DryRunExecutionBackend paper close 会按当前 mark value 和已领取手
   assert.equal(result.stateOperations?.[0]?.kind, "adjust_capital");
   assert.equal(result.stateOperations?.[0]?.kind === "adjust_capital" ? result.stateOperations[0].deltaSol : undefined, 2.7);
 });
+
+test("DryRunExecutionBackend 启用成本模型后会落账成本并扣减资金", async () => {
+  const config = createAgentConfig();
+  config.cost_model = {
+    enabled: true,
+    network_fee_lamports: 5_000,
+    priority_fee_lamports: 0,
+    jito_tip_lamports: 0,
+    rent_per_position_sol: 0.002,
+    slippage_bps: 100,
+    rebalance_slippage_bps: 100,
+    failed_tx_fee_lamports: 0
+  };
+  const action = createOpenAction({
+    amountSol: 1
+  });
+  const result = await createBackend(config).execute(action, { availableCapitalSol: 10 });
+  const delta = result.stateOperations?.[0]?.kind === "adjust_capital" ? result.stateOperations[0].deltaSol : undefined;
+  const position = result.stateOperations?.[1]?.kind === "upsert_position" ? result.stateOperations[1].position : undefined;
+
+  assert.equal(delta?.toFixed(6), "-1.012005");
+  assert.equal(position?.costsPaidSol?.toFixed(6), "0.012005");
+  assert.equal((result.metadata?.costEstimate as { totalSol?: number } | undefined)?.totalSol?.toFixed(6), "0.012005");
+});

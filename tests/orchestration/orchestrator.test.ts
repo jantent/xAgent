@@ -62,6 +62,8 @@ test("Orchestrator 在 EMERGENCY_PAUSED 时短路主循环", async () => {
           updated: 0,
           stale: 0,
           skipped: 0,
+          lookedUp: 0,
+          resolvedPools: [],
           snapshots: []
         };
       }
@@ -181,6 +183,8 @@ test("Orchestrator 会串起 scan -> risk -> execute -> notify 主流程", async
           updated: 0,
           stale: 0,
           skipped: 0,
+          lookedUp: 0,
+          resolvedPools: [],
           snapshots: []
         };
       }
@@ -303,6 +307,8 @@ test("Orchestrator 会在所有 provider 长时间不可用时自动全撤", asy
           updated: 0,
           stale: 0,
           skipped: 0,
+          lookedUp: 0,
+          resolvedPools: [],
           snapshots: []
         };
       }

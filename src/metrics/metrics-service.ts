@@ -97,6 +97,21 @@ export class MetricsService {
     this.registry.setGauge("xagent_active_positions", "当前活跃仓位数量", snapshot.activePositions.length);
     this.registry.setGauge("xagent_total_positions", "当前总仓位数量（含已关闭）", snapshot.allPositions.length);
     this.registry.setGauge("xagent_available_capital_sol", "当前可用 SOL 资金", snapshot.availableCapitalSol);
+    this.registry.setGauge(
+      "xagent_active_costs_paid_sol",
+      "当前活跃仓位累计成本（SOL）",
+      snapshot.activePositions.reduce((sum, position) => sum + (position.costsPaidSol ?? 0), 0)
+    );
+    this.registry.setGauge(
+      "xagent_stale_active_positions",
+      "当前 stale paper mark 的活跃仓位数量",
+      snapshot.activePositions.filter((position) => position.paper?.staleReason).length
+    );
+    this.registry.setGauge(
+      "xagent_worst_active_pnl_percent",
+      "当前活跃仓位最差 PnL 百分比",
+      snapshot.activePositions.reduce((worst, position) => Math.min(worst, position.pnlPercent), 0)
+    );
     this.registry.setGauge("xagent_system_mode_info", "当前系统模式信息", 1, {
       mode: snapshot.mode
     });

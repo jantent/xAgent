@@ -9,14 +9,15 @@
 - 主循环 / 高频循环的自研编排器
 - 风控、组合管理、执行层的可扩展实现
 - 文件审计日志与控制台通知
-- dry-run paper trading：用真实 Meteora 池子数据近似更新虚拟仓位 PnL
-- Telegram 只读控制面：手机端查看 Dashboard 链接、状态、仓位与审计事件
+- dry-run paper trading：用真实 Meteora 池子数据近似更新虚拟仓位 PnL，并在活跃仓位缺失于候选列表时按 pool address 回查 active bin
+- PnL ledger、成本模型、硬风控过滤、Canary kill switch、策略实验和 dry-run 自动调参
+- Telegram 只读控制面：手机端查看 Dashboard 链接、状态/KPI、基础设施、仓位、交易历史、资产报告、Skill/Optimizer 与审计事件
 
 当前版本默认会优先尝试真实 HTTP 数据源与 Meteora 池子发现接口；如果外部服务不可用，再自动回退到 `config/sample-pools.json` 和 mock provider，方便在没有真实 RPC、钱包和外部 API Key 的情况下先验证流程。
 默认 `execution.mode: dry_run` 不会真实下单；当 `paper_trading.enabled=true` 时，系统会在主循环中用真实 Meteora 池子的 active bin、价格与 fee/TVL 对虚拟仓位做近似估值。如果池子数据来自 mock fallback，paper trading 只写 stale 快照，不伪造收益。
 
 从这次改动开始，仓库额外提供了 `config/agent.canary.yaml` 和 `config/agent.prod.yaml`。它们会打开 production guardrails：禁用运行时 mock 数据源 / mock LLM、要求 live 启动前完成 signer + RPC 预检、要求状态主存储为 SQLite，并默认启用单实例锁与持久化失败自动降级。
-当前 preflight 会额外检查主数据源、池子发现源、Jupiter / Jito / gateway 可达性，以及本地活跃仓位的 wallet / positionPubkey 与 signer、链上账户是否一致。
+当前 preflight 会额外检查主数据源、池子发现源、Jupiter / Jito / gateway 可达性、成本模型、硬过滤、SQLite 状态存储，以及本地活跃仓位的 wallet / positionPubkey 与 signer、链上账户是否一致。
 如果配置了 `guardrails.active_position_reconcile=repair`，`live_sdk` 启动时会先回放最近审计里的 `stateOperations`、恢复 pending 交易，再把链上已不存在的本地 active 安全收敛为 closed；`live_gateway` 则会按远端镜像主动修复本地 active positions。
 
 从这一版开始，执行层已经拆成可切换 backend：
@@ -106,7 +107,9 @@ WALLET_PRIVATE_KEY='[...]' XAGENT_WALLET_KEY='your-passphrase' \
 - `GET /skills`：所有 Skill 配置、当前生命周期状态与运行统计
 - `GET /skills/stats`：按 Skill 版本聚合的运行统计
 - `GET /skills/optimizer/recommendations`：查看 dry-run Skill Optimizer 生成的参数优化建议
-- `POST /skills/optimizer/evaluate`：手动刷新 Skill Optimizer 建议；只更新建议，不自动修改 Skill 参数
+- `POST /skills/optimizer/evaluate`：手动刷新 Skill Optimizer 建议；只有 `skill_optimizer.auto_apply=true` 且样本/置信度达标时才会自动应用 patch
+- `GET /skills/experiments`：查看每个 Skill 的 warming up / promote / demote / data-quality 状态
+- `GET /pnl/ledger`：按仓位归集投入、回收、已领/未领手续费、成本、已实现/未实现 PnL，并标记缺失 open/close 审计
 - `GET /positions?active=true`：仓位列表，可只看活跃仓位
 - `GET /audit/events?limit=20`：最近审计事件
 - `POST /control/pause`：全局暂停
@@ -121,6 +124,15 @@ WALLET_PRIVATE_KEY='[...]' XAGENT_WALLET_KEY='your-passphrase' \
 - `GET /metrics`：Prometheus 文本格式指标
 - `GET /paper-trading/snapshots`：查看 paper trading 仓位估值快照，支持 `positionId`、`skillId`、`limit` 过滤
 
+离线回放 / 复盘工具：
+
+```bash
+npm run build
+npm run replay:audit -- --actions runtime/audit/actions.jsonl
+```
+
+该工具会输出 action 计数、资金变动、已实现 PnL、已领取手续费，以及仍未看到 close action 的仓位列表。
+
 `GET /status` 和 `GET /health` 现在会额外返回 execution backend 状态、paper trading 汇总与当前 pool source 名称，便于确认当前是 `dry_run`、`live_sdk` 还是 `live_gateway`，以及候选池来自真实源还是 fallback。
 Skill 的启停、Canary 比例、参数热更新和 rollback 结果现在会写回运行时状态快照，进程重启后仍会保留最近一次控制面变更。
 
@@ -134,10 +146,10 @@ Dashboard 当前覆盖：
 - Storage / Wallet 面板：展示 state/audit/cache backend、wallet source、key version、secret forwarding 开关
 - 最近审计事件面板
 - 仓位矩阵：支持单仓强退
-- Skill 控制台：支持启用、停用、Canary 切换，并展示按版本聚合的仓位 / 胜率 / 费用 / paper 费用 / 估算盈亏 / 最大回撤，以及 dry-run Skill Optimizer 的只读参数建议
+- Skill 控制台：支持启用、停用、Canary 切换，并展示按版本聚合的仓位 / 胜率 / 费用 / paper 费用 / 估算盈亏 / 最大回撤、实验状态，以及 dry-run Skill Optimizer 的参数建议和应用按钮
 - 主循环会按 `risk.fee_claim_interval_hours` 自动触发手续费检查/提取；当 `lincoln_exit_threshold` 命中时，会自动转为平仓动作
 
-Telegram bot 当前是只读控制面，和通知器共用 `TG_BOT_TOKEN`，默认只允许 `TG_CHAT_ID` 中列出的 chat 访问。线上建议配置 `XAGENT_DASHBOARD_URL=https://你的域名/dashboard`，bot 的 `/dashboard` 会发送页面链接；`/status`、`/positions [active|closed|all] [关键词]`、`/position <id|symbol|mint|pool>`、`/events [source] [关键词]` 用于手机端查看运行态、仓位和审计事件。`TG_CHAT_ID` 支持逗号或空白分隔多个 chat id，未授权用户只能通过 `/id` 查看自己的 chat id。
+Telegram bot 当前是只读控制面，和通知器共用 `TG_BOT_TOKEN`，默认只允许 `TG_CHAT_ID` 中列出的 chat 访问。线上建议配置 `XAGENT_DASHBOARD_URL=https://你的域名/dashboard`，bot 的 `/dashboard` 会发送页面链接；`/status`、`/infra`、`/positions [active|closed|all|closing|error] [关键词]`、`/position <id|symbol|mint|pool>`、`/trades [action] [status] [关键词]`、`/report [7|30|90]`、`/skills [关键词]`、`/optimizer`、`/events [source] [关键词]` 用于手机端覆盖 Dashboard 的主要只读视图。`TG_CHAT_ID` 支持逗号或空白分隔多个 chat id，未授权用户只能通过 `/id` 查看自己的 chat id。
 
 示例：
 

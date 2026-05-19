@@ -7,8 +7,10 @@ import {
   buildUrl,
   normalizeTimestamp,
   readArray,
+  readBoolean,
   readNumber,
   readObject,
+  selectEntity,
   readString,
   selectEntityList
 } from "../shared/http-source-utils.js";
@@ -61,6 +63,30 @@ export class HttpMeteoraPoolSource implements IPoolSource {
 
     this.logger.info("读取真实池子发现结果", { count: pools.length, source: this.name });
     return pools;
+  }
+
+  async getPool(address: string): Promise<PoolCandidate | undefined> {
+    const detailPath = this.config.pool_detail_path;
+    const payload = detailPath
+      ? await this.requestJson(detailPath.replace("{address}", encodeURIComponent(address)), { address })
+      : await this.requestJson(this.config.discovery_path ?? "/pools", {
+          page: 1,
+          page_size: this.config.discovery_limit ?? 50,
+          address
+        });
+
+    const pool = detailPath
+      ? this.mapPool(selectEntity(payload, address) ?? {})
+      : selectEntityList(payload)
+          .map((item) => this.mapPool(item))
+          .find((candidate): candidate is PoolCandidate => candidate?.address === address);
+    if (pool?.address === address) {
+      this.logger.info("按地址回查真实池子成功", { address, source: this.name });
+      return pool;
+    }
+
+    this.logger.warn("按地址回查真实池子未命中精确地址", { address, source: this.name });
+    return undefined;
   }
 
   async healthCheck(): Promise<ProviderHealthStatus> {
@@ -203,8 +229,34 @@ export class HttpMeteoraPoolSource implements IPoolSource {
         ...(description ? { description } : {}),
         ...(activeBinId !== undefined ? { activeBinId } : {}),
         ...(currentPrice !== undefined ? { currentPrice } : {}),
-        ...(createdAt !== undefined ? { createdAt } : {})
+        ...(createdAt !== undefined ? { createdAt } : {}),
+        ...this.extractRiskMeta(item, baseToken)
       }
+    };
+  }
+
+  private extractRiskMeta(
+    item: Record<string, unknown>,
+    baseToken?: Record<string, unknown>
+  ): Record<string, unknown> {
+    const safety = readObject(item, "safety", "tokenSafety", "security", "risk") ?? {};
+    const source = { ...(baseToken ?? {}), ...item, ...safety };
+    const topHolderPct = readNumber(source, "topHolderPct", "top_holder_pct", "top10HolderPct", "top_10_holder_pct");
+    const rugProbability = readNumber(source, "rugProbability", "rug_probability", "rugProb", "risk_score");
+    const bundlerRate = readNumber(source, "bundlerRate", "bundler_rate", "bundleRate");
+    const botDegenRate = readNumber(source, "botDegenRate", "bot_degen_rate", "botRate");
+    const hasDevSell = readBoolean(source, "hasDevSell", "has_dev_sell", "devSell", "creator_sell");
+    const stale = readBoolean(source, "isStale", "is_stale", "stale");
+    const priceDeviationBps = readNumber(source, "priceDeviationBps", "price_deviation_bps");
+
+    return {
+      ...(topHolderPct !== undefined ? { topHolderPct } : {}),
+      ...(rugProbability !== undefined ? { rugProbability } : {}),
+      ...(bundlerRate !== undefined ? { bundlerRate } : {}),
+      ...(botDegenRate !== undefined ? { botDegenRate } : {}),
+      ...(hasDevSell !== undefined ? { hasDevSell } : {}),
+      ...(stale !== undefined ? { stale } : {}),
+      ...(priceDeviationBps !== undefined ? { priceDeviationBps } : {})
     };
   }
 

@@ -70,6 +70,45 @@ function summarizeRpcErrors(
   return errors.length > 0 ? errors.join("; ") : "无可写 RPC，但未返回额外错误";
 }
 
+function validateLiveStaticConfig(config: AgentConfig, context: RuntimeGuardrailContext): void {
+  if (config.wallet.limits.per_transaction_max_sol <= 0 || config.wallet.limits.daily_cumulative_max_sol <= 0) {
+    throw new Error("live preflight 失败：钱包单笔/日累计限额必须大于 0");
+  }
+
+  if (config.wallet.limits.per_transaction_max_sol > config.wallet.limits.daily_cumulative_max_sol) {
+    throw new Error("live preflight 失败：wallet 单笔限额不能大于日累计限额");
+  }
+
+  if (config.cost_model?.enabled !== true) {
+    throw new Error("live preflight 失败：live 模式必须启用 cost_model，避免未计入租金/优先费/Jito tip/slippage");
+  }
+
+  if (config.risk.filters?.enabled !== true) {
+    throw new Error("live preflight 失败：live 模式必须启用 risk.filters 硬过滤");
+  }
+
+  if (config.canary?.enabled === true) {
+    if ((config.canary.max_concurrent_positions ?? 1) > config.system.max_concurrent_positions) {
+      throw new Error("live preflight 失败：canary.max_concurrent_positions 不能大于系统并发上限");
+    }
+
+    if (
+      config.canary.max_position_sol !== undefined &&
+      config.wallet.limits.per_transaction_max_sol > config.canary.max_position_sol
+    ) {
+      throw new Error("live preflight 失败：canary 阶段 wallet 单笔限额不能大于 canary.max_position_sol");
+    }
+  }
+
+  if (config.execution?.mode === "live_sdk" && (config.execution.live?.jupiter?.slippage_bps ?? 0) > 200) {
+    throw new Error("live preflight 失败：live_sdk Jupiter slippage_bps 超过 200");
+  }
+
+  if (context.storage.stateStoreKind !== "sqlite") {
+    throw new Error("live preflight 失败：live 模式必须使用 SQLite state store");
+  }
+}
+
 export function validateActivePositionLocalInvariants(
   signerAddress: string,
   positions: PositionRecord[]
@@ -188,6 +227,8 @@ export async function enforceRuntimeGuardrails(
     throw new Error("live preflight 失败：钱包 secret 未加载");
   }
 
+  validateLiveStaticConfig(config, context);
+
   let signerAddress: string;
   try {
     signerAddress = deriveSignerAddress(context.walletSecret);
@@ -262,4 +303,11 @@ export async function enforceRuntimeGuardrails(
     context.activePositions ?? [],
     context.checkPositionAccountExists
   );
+
+  const stalePositions = (context.activePositions ?? []).filter((position) => position.paper?.staleReason);
+  if (stalePositions.length > 0) {
+    throw new Error(
+      `live preflight 失败：存在 stale 活跃仓位，需先完成估值/回查修复: ${stalePositions.map((position) => position.id).join(", ")}`
+    );
+  }
 }

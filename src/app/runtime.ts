@@ -675,7 +675,7 @@ export async function buildRuntime(options: RuntimeBootstrapOptions): Promise<Ap
     const riskSentinel = new RiskSentinel(config, skillManager, rootLogger.child("risk_sentinel"));
     const portfolioManager = new PortfolioManager(rootLogger.child("portfolio_manager"));
     const executionLayer = createExecutionLayer(config, state, rpcManager, metricsService, walletSecret);
-    const paperTradingService = new PaperTradingService(config, state, rootLogger.child("paper_trading"));
+    const paperTradingService = new PaperTradingService(config, state, rootLogger.child("paper_trading"), poolSource);
     metricsService.bindExecutionStatusProvider(executionLayer);
     metricsService.bindRuntimeMetadataProvider({
     getStorageStatus: () => ({

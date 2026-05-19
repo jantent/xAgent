@@ -18,7 +18,7 @@ function createService(state: SharedState, overrides: Partial<ReturnType<typeof 
   return new PaperTradingService(config, state, createTestLogger());
 }
 
-test("PaperTradingService 会按真实池子 active bin、价格和 fee 更新 in-range 仓位", () => {
+test("PaperTradingService 会按真实池子 active bin、价格和 fee 更新 in-range 仓位", async () => {
   const position = createPositionRecord({
     depositedSol: 2,
     openedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -45,7 +45,7 @@ test("PaperTradingService 会按真实池子 active bin、价格和 fee 更新 i
     }
   });
 
-  const result = service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
+  const result = await service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
   const updated = state.getPosition(position.id);
 
   assert.equal(result.updated, 1);
@@ -58,7 +58,7 @@ test("PaperTradingService 会按真实池子 active bin、价格和 fee 更新 i
   assert.equal(state.getPaperPositionSnapshots().length, 1);
 });
 
-test("PaperTradingService 在 live execution 模式下不会估值", () => {
+test("PaperTradingService 在 live execution 模式下不会估值", async () => {
   const config = createAgentConfig();
   config.execution!.mode = "live_sdk";
   const position = createPositionRecord({
@@ -76,7 +76,7 @@ test("PaperTradingService 在 live execution 模式下不会估值", () => {
   });
   const service = new PaperTradingService(config, state, createTestLogger());
 
-  const result = service.valuate([
+  const result = await service.valuate([
     createPoolCandidate({
       address: position.poolAddress,
       dataSource: "meteora_http",
@@ -92,7 +92,7 @@ test("PaperTradingService 在 live execution 模式下不会估值", () => {
   assert.equal(state.getPosition(position.id)?.pnlPercent, position.pnlPercent);
 });
 
-test("PaperTradingService 会限制异常 fee/TVL 对虚拟手续费的影响", () => {
+test("PaperTradingService 会限制异常 fee/TVL 对虚拟手续费的影响", async () => {
   const position = createPositionRecord({
     depositedSol: 1,
     openedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -121,7 +121,7 @@ test("PaperTradingService 会限制异常 fee/TVL 对虚拟手续费的影响", 
     }
   });
 
-  service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
+  await service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
   const updated = state.getPosition(position.id);
   const snapshot = state.getPaperPositionSnapshots()[0];
 
@@ -130,7 +130,7 @@ test("PaperTradingService 会限制异常 fee/TVL 对虚拟手续费的影响", 
   assert.equal(updated?.pnlPercent.toFixed(2), "35.00");
 });
 
-test("PaperTradingService 会对 out-of-range 仓位设置出界状态并应用 capped penalty", () => {
+test("PaperTradingService 会对 out-of-range 仓位设置出界状态并应用 capped penalty", async () => {
   const position = createPositionRecord({
     depositedSol: 1,
     fromBinId: 7_995,
@@ -159,7 +159,7 @@ test("PaperTradingService 会对 out-of-range 仓位设置出界状态并应用 
     }
   });
 
-  service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
+  await service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
   const updated = state.getPosition(position.id);
 
   assert.equal(updated?.isInRange, false);
@@ -168,7 +168,7 @@ test("PaperTradingService 会对 out-of-range 仓位设置出界状态并应用 
   assert.equal(updated?.pnlPercent.toFixed(2), "-35.00");
 });
 
-test("PaperTradingService 缺少真实池子或 active bin 时只写 stale snapshot", () => {
+test("PaperTradingService 缺少真实池子或 active bin 时只写 stale snapshot", async () => {
   const position = createPositionRecord({
     pnlPercent: 7,
     paper: {
@@ -185,18 +185,192 @@ test("PaperTradingService 缺少真实池子或 active bin 时只写 stale snaps
   });
   const service = createService(state);
 
-  const result = service.valuate([], new Date("2026-01-02T00:00:00.000Z"));
+  const result = await service.valuate([], new Date("2026-01-02T00:00:00.000Z"));
   const updated = state.getPosition(position.id);
   const snapshot = state.getPaperPositionSnapshots()[0];
 
   assert.equal(result.updated, 0);
   assert.equal(result.stale, 1);
-  assert.equal(updated?.pnlPercent, 7);
+  assert.equal(updated?.pnlPercent.toFixed(2), "7.00");
+  assert.equal(updated?.currentValueUsd, 128.4);
+  assert.equal(updated?.paper?.currentValueSol, 1.284);
   assert.equal(updated?.paper?.staleReason, "paper valuation 缺少当前池子数据");
   assert.equal(snapshot?.stale, true);
+  assert.equal(snapshot?.valueUsd, 128.4);
+  assert.equal(snapshot?.pnlPercent.toFixed(2), "7.00");
 });
 
-test("PaperTradingService 会按配置保留最新快照", () => {
+test("PaperTradingService stale 估值会重置离谱历史 mark，避免污染 PnL ledger", async () => {
+  const position = createPositionRecord({
+    depositedSol: 1,
+    currentValueUsd: 10_000_000,
+    pnlPercent: 999_999,
+    paper: {
+      entryActiveBinId: 8_000,
+      entryPrice: 1,
+      currentValueSol: 100_000,
+      unclaimedFeesSol: 0
+    }
+  });
+  const state = new SharedState({
+    initialSnapshot: {
+      allPositions: [position]
+    }
+  });
+  const service = createService(state);
+
+  const result = await service.valuate([], new Date("2026-01-02T00:00:00.000Z"));
+  const updated = state.getPosition(position.id);
+  const snapshot = state.getPaperPositionSnapshots()[0];
+
+  assert.equal(result.updated, 0);
+  assert.equal(result.stale, 1);
+  assert.equal(updated?.paper?.currentValueSol, 1);
+  assert.equal(updated?.currentValueUsd, 100);
+  assert.equal(updated?.pnlPercent, 0);
+  assert.equal(snapshot?.valueSol, 1);
+  assert.equal(snapshot?.pnlPercent, 0);
+});
+
+test("PaperTradingService 价格偏离超过保护阈值时写 stale 并保留保守 mark", async () => {
+  const position = createPositionRecord({
+    depositedSol: 1,
+    paper: {
+      entryActiveBinId: 8_000,
+      entryPrice: 1,
+      currentValueSol: 1,
+      unclaimedFeesSol: 0
+    }
+  });
+  const state = new SharedState({
+    initialSnapshot: {
+      allPositions: [position]
+    }
+  });
+  const service = createService(state);
+  const pool = createPoolCandidate({
+    address: position.poolAddress,
+    dataSource: "meteora_http",
+    meta: {
+      activeBinId: 8_000,
+      currentPrice: 100
+    }
+  });
+
+  const result = await service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
+  const updated = state.getPosition(position.id);
+  const snapshot = state.getPaperPositionSnapshots()[0];
+
+  assert.equal(result.updated, 0);
+  assert.equal(result.stale, 1);
+  assert.equal(updated?.paper?.staleReason, "paper valuation 价格偏离超过保护阈值");
+  assert.equal(updated?.paper?.currentValueSol, 1);
+  assert.equal(updated?.pnlPercent, 0);
+  assert.equal(snapshot?.stale, true);
+  assert.equal(snapshot?.source, "meteora_http");
+});
+
+test("PaperTradingService 计算出的 mark 超过保护阈值时不会写入异常快照", async () => {
+  const position = createPositionRecord({
+    depositedSol: 1,
+    paper: {
+      entryActiveBinId: 8_000,
+      entryPrice: 1,
+      currentValueSol: 1.1,
+      unclaimedFeesSol: 0
+    }
+  });
+  const state = new SharedState({
+    initialSnapshot: {
+      allPositions: [position]
+    }
+  });
+  const service = createService(state, {
+    price_exposure: 10
+  });
+  const pool = createPoolCandidate({
+    address: position.poolAddress,
+    dataSource: "meteora_http",
+    meta: {
+      activeBinId: 8_000,
+      currentPrice: 2
+    }
+  });
+
+  const result = await service.valuate([pool], new Date("2026-01-02T00:00:00.000Z"));
+  const updated = state.getPosition(position.id);
+  const snapshot = state.getPaperPositionSnapshots()[0];
+
+  assert.equal(result.updated, 0);
+  assert.equal(result.stale, 1);
+  assert.equal(updated?.paper?.staleReason, "paper valuation 估值超过保护阈值");
+  assert.equal(updated?.paper?.currentValueSol, 1.1);
+  assert.equal(updated?.pnlPercent.toFixed(2), "10.00");
+  assert.equal(snapshot?.stale, true);
+  assert.equal(snapshot?.valueSol, 1.1);
+  assert.equal(snapshot?.pnlPercent.toFixed(2), "10.00");
+});
+
+test("PaperTradingService 会按 pool address 回查活跃仓位，避免 missing_pool stale", async () => {
+  const config = createAgentConfig();
+  config.valuation = {
+    sol_price_usd: 100
+  };
+  const position = createPositionRecord({
+    poolAddress: "pool-live-1",
+    depositedSol: 1,
+    paper: {
+      entryActiveBinId: 8_000,
+      entryPrice: 1,
+      currentValueSol: 1,
+      unclaimedFeesSol: 0
+    }
+  });
+  const state = new SharedState({
+    initialSnapshot: {
+      allPositions: [position]
+    }
+  });
+  const lookedUpPool = createPoolCandidate({
+    address: "pool-live-1",
+    dataSource: "meteora_http",
+    meta: {
+      activeBinId: 8_001,
+      currentPrice: 1.05
+    }
+  });
+  const service = new PaperTradingService(config, state, createTestLogger(), {
+    name: "test_pool_source",
+    async discoverPools() {
+      return [];
+    },
+    async getPool(address: string) {
+      return address === lookedUpPool.address ? lookedUpPool : undefined;
+    },
+    async healthCheck() {
+      return {
+        provider: "test_pool_source",
+        ok: true,
+        canRead: true,
+        canWrite: false,
+        lastCheckedAt: new Date(),
+        consecutiveFailures: 0
+      };
+    }
+  });
+
+  const result = await service.valuate([], new Date("2026-01-02T00:00:00.000Z"));
+  const updated = state.getPosition(position.id);
+
+  assert.equal(result.updated, 1);
+  assert.equal(result.stale, 0);
+  assert.equal(result.lookedUp, 1);
+  assert.equal(result.resolvedPools[0]?.address, "pool-live-1");
+  assert.equal(updated?.paper?.staleReason, undefined);
+  assert.equal(updated?.paper?.lastSource, "meteora_http");
+});
+
+test("PaperTradingService 会按配置保留最新快照", async () => {
   const positions = [0, 1, 2].map((index) =>
     createPositionRecord({
       id: `position-${index}`,
@@ -230,7 +404,7 @@ test("PaperTradingService 会按配置保留最新快照", () => {
     })
   );
 
-  service.valuate(pools, new Date("2026-01-02T00:00:00.000Z"));
+  await service.valuate(pools, new Date("2026-01-02T00:00:00.000Z"));
 
   assert.equal(state.getPaperPositionSnapshots().length, 2);
 });

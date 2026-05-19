@@ -176,6 +176,7 @@ export interface PositionRecord {
   pnlPercent: number;
   isInRange: boolean;
   totalFeesClaimedSol: number;
+  costsPaidSol?: number;
   rebalanceCount: number;
   status: PositionStatus;
   entryLincolnScore: number;

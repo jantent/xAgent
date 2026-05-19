@@ -258,3 +258,46 @@ test("SkillOptimizerService 会持久化最新建议到 SharedState", () => {
   assert.equal(recommendations.length, 1);
   assert.equal(state.getSkillOptimizationRecommendations().length, 1);
 });
+
+test("SkillOptimizerService auto_apply 只应用高置信度且样本足够的参数 patch", () => {
+  const config = createAgentConfig();
+  config.skill_optimizer = {
+    ...config.skill_optimizer,
+    min_closed_positions: 1,
+    min_snapshots: 1,
+    auto_apply: true,
+    min_auto_apply_confidence: 0.5,
+    min_auto_apply_closed_positions: 1,
+    auto_apply_actions: ["reduce_risk"]
+  };
+  const skill = createSkill({
+    params: {
+      binCount: 10
+    },
+    riskLimits: {
+      stopLossPercent: 20,
+      maxAliveHours: 100
+    }
+  });
+  const state = new SharedState({
+    initialSnapshot: {
+      allPositions: [
+        createClosedPosition({
+          currentValueUsd: 80,
+          pnlPercent: -25
+        })
+      ],
+      paperPositionSnapshots: [createSnapshot({ pnlPercent: -25 })]
+    }
+  });
+  const skillManager = new SkillManager([skill]);
+  const service = new SkillOptimizerService(config, state, new SkillStatsService(state), skillManager);
+  const recommendations = service.evaluateAndStore();
+
+  const applied = service.applyEligibleRecommendations(recommendations);
+  const updated = skillManager.getSkill(skill.id, skill.version);
+
+  assert.equal(applied.length, 1);
+  assert.equal(updated?.params.binCount, 8);
+  assert.equal(updated?.riskLimits.stopLossPercent, 16);
+});

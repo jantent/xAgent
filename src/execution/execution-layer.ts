@@ -8,6 +8,7 @@ import type { Logger } from "../utils/logger.js";
 
 const MUTATING_ACTION_TYPES = new Set(["open", "close", "rebalance", "claim", "emergency_exit"]);
 const CLOSE_ONLY_ALLOWED_ACTION_TYPES = new Set(["close", "emergency_exit"]);
+const MANUAL_PAUSE_ALLOWED_ACTION_TYPES = new Set(["close", "emergency_exit"]);
 
 /**
  * ExecutionLayer 现在只保留三件事：
@@ -33,7 +34,7 @@ export class ExecutionLayer {
     const backendStatus = this.backend.getStatus();
     const shouldTrackAction = MUTATING_ACTION_TYPES.has(action.type);
 
-    if (this.state.isManualPause()) {
+    if (this.state.isManualPause() && !MANUAL_PAUSE_ALLOWED_ACTION_TYPES.has(action.type)) {
       return {
         actionId: action.id,
         type: action.type,

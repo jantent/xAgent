@@ -20,6 +20,15 @@ import type { SkillOptimizerService } from "../services/skill-optimizer-service.
 import { createId, sleep } from "../utils/async.js";
 import type { Logger } from "../utils/logger.js";
 
+function mergePools<T extends { address: string }>(primary: T[], updates: T[]): T[] {
+  const byAddress = new Map(primary.map((item) => [item.address, item]));
+  for (const item of updates) {
+    byAddress.set(item.address, item);
+  }
+
+  return Array.from(byAddress.values());
+}
+
 /**
  * Orchestrator 是整个系统的总调度中心。
  * 这里的关键原则有两个：
@@ -97,12 +106,21 @@ export class Orchestrator {
         snapshot.activePositions,
         snapshot.availableCapitalSol
       );
-      const mode = this.systemModeManager.evaluateMode({
+      let mode = this.systemModeManager.evaluateMode({
         manualPaused: snapshot.manualPause,
         rpcHealth,
         dataHealth,
         portfolioHealth
       });
+
+      const canaryKillReason = this.evaluateCanaryKillSwitch(snapshot, portfolioHealth);
+      if (canaryKillReason) {
+        this.state.setManualPause(true);
+        this.state.setPauseReason(`canary_kill_switch:${canaryKillReason}`);
+        mode = SystemMode.EMERGENCY_PAUSED;
+        await this.auditLogger.recordPhase(cycleId, "canary_kill_switch", { reason: canaryKillReason });
+        await this.notifier.sendAlert("critical", "Canary kill switch 已触发", canaryKillReason, { cycleId });
+      }
       this.state.setMode(mode);
 
       if (mode === SystemMode.EMERGENCY_PAUSED) {
@@ -141,12 +159,13 @@ export class Orchestrator {
       const candidates = await this.poolScout.discoverAndScore(cycleId);
       await this.auditLogger.recordPhase(cycleId, "scan", { candidates: candidates.length });
 
-      const paperValuation = this.paperTradingService.valuate(candidates);
+      const paperValuation = await this.paperTradingService.valuate(candidates);
       await this.auditLogger.recordPhase(cycleId, "paper_valuation", {
         enabled: paperValuation.enabled,
         updated: paperValuation.updated,
         stale: paperValuation.stale,
-        skipped: paperValuation.skipped
+        skipped: paperValuation.skipped,
+        lookedUp: paperValuation.lookedUp
       });
 
       const plans = await this.strategySelector.matchSkills(candidates, cycleId);
@@ -158,15 +177,16 @@ export class Orchestrator {
         rejected: reviewedPlans.filter((item) => !item.approved).length
       });
 
+      const maintenancePools = mergePools(candidates, paperValuation.resolvedPools);
       const activeBinByPool = new Map<string, number>(
-        candidates.flatMap((candidate) =>
+        maintenancePools.flatMap((candidate) =>
           typeof candidate.meta?.activeBinId === "number" && Number.isFinite(candidate.meta.activeBinId)
             ? [[candidate.address, Math.trunc(candidate.meta.activeBinId)]]
             : []
         )
       );
       const candidateByPoolAddress = new Map<string, CycleResult["actions"][number]["pool"]>(
-        candidates.map((candidate) => [candidate.address, candidate])
+        maintenancePools.map((candidate) => [candidate.address, candidate])
       );
       const maintenanceActions = this.riskSentinel.inspectActivePositions(
         this.state.getActivePositions(),
@@ -248,9 +268,76 @@ export class Orchestrator {
     return !dataHealth.hasAnyProvider && (dataHealth.allProvidersDownForMs ?? 0) >= this.config.data_providers.cache.auto_exit_ms;
   }
 
+  private evaluateCanaryKillSwitch(
+    snapshot: ReturnType<SharedState["getSnapshot"]>,
+    portfolioHealth: ReturnType<RiskSentinel["buildPortfolioHealth"]>
+  ): string | undefined {
+    const canary = this.config.canary;
+    const killSwitch = canary?.kill_switch;
+    if (canary?.enabled !== true || killSwitch?.enabled !== true || snapshot.manualPause) {
+      return undefined;
+    }
+
+    const activePositions = snapshot.activePositions;
+    const lossSol = activePositions.reduce(
+      (sum, position) => sum + Math.max(0, position.depositedSol * Math.max(0, -position.pnlPercent) / 100),
+      0
+    );
+    if (killSwitch.max_daily_loss_sol !== undefined && lossSol >= killSwitch.max_daily_loss_sol) {
+      return `未实现/浮动亏损 ${lossSol.toFixed(4)} SOL 超过 canary 上限 ${killSwitch.max_daily_loss_sol.toFixed(4)} SOL`;
+    }
+
+    if (killSwitch.max_daily_loss_pct !== undefined && portfolioHealth.dailyLossPct >= killSwitch.max_daily_loss_pct) {
+      return `组合日内亏损 ${portfolioHealth.dailyLossPct.toFixed(2)}% 超过 canary 上限 ${killSwitch.max_daily_loss_pct.toFixed(2)}%`;
+    }
+
+    const worstPosition = activePositions.reduce<ReturnType<SharedState["getActivePositions"]>[number] | undefined>(
+      (worst, position) => (!worst || position.pnlPercent < worst.pnlPercent ? position : worst),
+      undefined
+    );
+    if (
+      killSwitch.max_position_loss_pct !== undefined &&
+      worstPosition &&
+      worstPosition.pnlPercent <= -killSwitch.max_position_loss_pct
+    ) {
+      return `仓位 ${worstPosition.id} 浮亏 ${worstPosition.pnlPercent.toFixed(2)}% 超过 canary 单仓上限`;
+    }
+
+    const stalePositions = activePositions.filter((position) => position.paper?.staleReason);
+    if (
+      killSwitch.max_stale_position_count !== undefined &&
+      stalePositions.length > killSwitch.max_stale_position_count
+    ) {
+      return `stale 活跃仓位 ${stalePositions.length} 个超过 canary 上限 ${killSwitch.max_stale_position_count}`;
+    }
+
+    const oldestPending = (snapshot.pendingActions ?? [])[0];
+    if (
+      killSwitch.max_pending_action_age_ms !== undefined &&
+      oldestPending &&
+      Date.now() - oldestPending.startedAt.getTime() >= killSwitch.max_pending_action_age_ms
+    ) {
+      return `pending action ${oldestPending.action.id} 超过 ${killSwitch.max_pending_action_age_ms}ms 未完成`;
+    }
+
+    if (
+      killSwitch.max_consecutive_failures !== undefined &&
+      snapshot.lastCycleResult &&
+      snapshot.lastCycleResult.failed >= killSwitch.max_consecutive_failures
+    ) {
+      return `上一轮失败动作数 ${snapshot.lastCycleResult.failed} 达到 canary 连续失败阈值`;
+    }
+
+    return undefined;
+  }
+
   private refreshSkillOptimizationRecommendations(): void {
     try {
-      this.skillOptimizerService?.evaluateAndStore();
+      const recommendations = this.skillOptimizerService?.evaluateAndStore() ?? [];
+      const applied = this.skillOptimizerService?.applyEligibleRecommendations(recommendations) ?? [];
+      if (applied.length > 0) {
+        this.logger.warn("Skill Optimizer 已自动应用高置信度建议", { applied });
+      }
     } catch (error) {
       this.logger.warn("Skill Optimizer 评估失败，保留上一轮建议", { error });
     }

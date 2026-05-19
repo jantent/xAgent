@@ -27,6 +27,11 @@ export class MockMeteoraPoolSource implements IPoolSource {
     return pools;
   }
 
+  async getPool(address: string): Promise<PoolCandidate | undefined> {
+    const pools = await this.discoverPools();
+    return pools.find((pool) => pool.address === address);
+  }
+
   async healthCheck(): Promise<ProviderHealthStatus> {
     return {
       provider: this.name,

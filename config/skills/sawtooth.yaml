@@ -2,8 +2,8 @@ id: "sawtooth"
 version: "1.3.0"
 name: "Sawtooth BidAsk"
 description: "适用于波动偏大、短线有回撤风险的池子，采用 BidAsk 分布增强防守。"
-status: "canary"
-canaryPercent: 25
+status: "active"
+canaryPercent: 0
 params:
   direction: "below"
   distributionType: "BidAsk"
@@ -31,18 +31,18 @@ params:
       threshold: 2
 riskLimits:
   maxPositionSizePercent: 1.5
-  maxTotalExposurePercent: 8
+  maxTotalExposurePercent: 6
   maxConcurrentPositions: 8
-  stopLossPercent: 18
+  stopLossPercent: 14
   maxAliveHours: 48
-  maxDailyRebalances: 8
+  maxDailyRebalances: 5
 applicability:
   minLincolnScore: 2.0
   minSafetyScore: 60
   minMcap: 800000
   maxMcap: 30000000
   lifecycleStages: ["hype", "plateau", "decline"]
-changelog: "根据本地 dry-run 表现将 Sawtooth 调整为 25% 灰度，避免持续抢占默认主策略。"
+changelog: "线上 dry-run 保留 sawtooth 为主策略，但收缩总敞口、止损和每日重平衡以降低同 token 集中与调仓成本。"
 previousVersion: "1.2.0"
 createdAt: "2026-03-28T00:00:00.000Z"
 updatedAt: "2026-03-28T00:00:00.000Z"

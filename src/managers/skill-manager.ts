@@ -8,6 +8,11 @@ interface SkillManagerOptions {
   onChange?: (skills: SkillMeta[]) => void;
 }
 
+interface SkillPatch {
+  params?: Partial<SkillMeta["params"]>;
+  riskLimits?: Partial<SkillMeta["riskLimits"]>;
+}
+
 function specificityScore(skill: SkillMeta): number {
   let score = 0;
 
@@ -100,10 +105,29 @@ export class SkillManager {
   }
 
   patchSkillParams(skillId: string, paramsPatch: Partial<SkillMeta["params"]>): SkillMeta | null {
-    return this.updateSkillParams(skillId, (skill) => ({
-      ...skill,
-      params: deepMerge(skill.params, paramsPatch)
-    }));
+    return this.patchSkillConfig(skillId, { params: paramsPatch });
+  }
+
+  patchSkillConfig(skillId: string, patch: SkillPatch, version?: string): SkillMeta | null {
+    const index = this.skills.findIndex((skill) => skill.id === skillId && (version ? skill.version === version : true));
+    if (index < 0) {
+      return null;
+    }
+
+    const currentSkill = this.skills[index];
+    if (!currentSkill) {
+      return null;
+    }
+
+    const updatedSkill: SkillMeta = {
+      ...currentSkill,
+      params: patch.params ? deepMerge(currentSkill.params, patch.params) : currentSkill.params,
+      riskLimits: patch.riskLimits ? deepMerge(currentSkill.riskLimits, patch.riskLimits) : currentSkill.riskLimits,
+      updatedAt: new Date()
+    };
+    this.skills[index] = updatedSkill;
+    this.emitChange();
+    return structuredClone(updatedSkill);
   }
 
   rollback(skillId: string, version?: string): SkillMeta | null {

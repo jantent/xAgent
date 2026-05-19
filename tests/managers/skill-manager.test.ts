@@ -59,3 +59,28 @@ test("SkillManager.rollback 会激活目标版本并停用同 id 的其他版本
   assert.equal(manager.getSkill("bread_n_butter", "1.0.0")?.status, SkillStatus.ACTIVE);
   assert.equal(manager.getSkill("bread_n_butter", "2.0.0")?.status, SkillStatus.DISABLED);
 });
+
+test("SkillManager.patchSkillConfig 会同时更新 params 与 riskLimits", () => {
+  const changes = [];
+  const manager = new SkillManager([createSkill()], {
+    onChange(skills) {
+      changes.push(skills);
+    }
+  });
+
+  const updated = manager.patchSkillConfig("bread_n_butter", {
+    params: {
+      binCount: 55
+    },
+    riskLimits: {
+      stopLossPercent: 16,
+      maxAliveHours: 58
+    }
+  });
+
+  assert.equal(updated?.params.binCount, 55);
+  assert.equal(updated?.riskLimits.stopLossPercent, 16);
+  assert.equal(updated?.riskLimits.maxAliveHours, 58);
+  assert.equal(manager.getSkill("bread_n_butter")?.params.binStepPreference.length, 2);
+  assert.equal(changes.length, 1);
+});

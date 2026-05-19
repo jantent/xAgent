@@ -61,9 +61,9 @@ export function renderDashboardPage(): string {
     '        </div>',
     '        <div class="control-bar">',
     '          <button class="action-button action-ghost" data-action="refresh" data-busy-key="global:refresh">刷新</button>',
-    '          <button class="action-button" data-action="run-main-cycle" data-busy-key="global:refresh">运行主循环</button>',
-    '          <button class="action-button action-warn" data-action="pause" data-busy-key="global:refresh">暂停</button>',
-    '          <button class="action-button action-safe" data-action="resume" data-busy-key="global:refresh">恢复</button>',
+    '          <button class="action-button" data-action="run-main-cycle" data-busy-key="control:run-main-cycle">运行主循环</button>',
+    '          <button class="action-button action-warn" data-action="pause" data-busy-key="control:pause">暂停</button>',
+    '          <button class="action-button action-safe" data-action="resume" data-busy-key="control:resume">恢复</button>',
     '        </div>',
     '      </header>',
     '      <section id="view-positions-events" class="view is-active" data-view="positions-events">',
@@ -154,7 +154,7 @@ export function renderDashboardPage(): string {
     '          <section class="panel">',
     '            <div class="panel-head">',
     '              <div><p class="eyebrow">Execution</p><h2>执行后端</h2></div>',
-    '              <a class="text-link" href="/metrics" target="_blank" rel="noreferrer">Prometheus</a>',
+    '              <button type="button" class="text-link text-button" data-action="open-metrics" data-busy-key="metrics">Prometheus</button>',
     '            </div>',
     '            <div id="execution-summary" class="stack loading-block">等待执行后端状态...</div>',
     '          </section>',
@@ -176,7 +176,7 @@ export function renderDashboardPage(): string {
     '              <div><p class="eyebrow">Risk Control</p><h2>Danger Zone</h2></div>',
     '              <span class="subtle">高风险操作会要求二次确认</span>',
     '            </div>',
-    '            <button class="action-button action-danger" data-action="emergency-exit-all" data-busy-key="global:refresh">全仓紧急撤出</button>',
+    '            <button class="action-button action-danger" data-action="emergency-exit-all" data-busy-key="control:emergency-exit-all">全仓紧急撤出</button>',
     '          </section>',
     '        </div>',
     '      </section>',
@@ -690,6 +690,14 @@ body {
   color: #1d4ed8;
 }
 
+.text-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
 .health-list,
 .feed-list {
   display: grid;
@@ -1000,6 +1008,88 @@ tbody tr:last-child td {
   gap: 8px;
 }
 
+.optimizer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.skill-config-editor {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.skill-config-editor summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.skill-config-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.skill-param-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(96px, 150px) minmax(180px, 1.4fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid rgb(148 163 184 / 0.12);
+}
+
+.skill-param-row:last-child {
+  border-bottom: 0;
+}
+
+.skill-param-label strong,
+.skill-param-help strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.skill-param-label span,
+.skill-param-help span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.skill-param-input input,
+.skill-param-input select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.skill-param-suggestion {
+  display: inline-flex;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.72rem;
+}
+
+.skill-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
 .optimizer-patch {
   margin: 0;
   padding: 8px 10px;
@@ -1099,6 +1189,53 @@ tbody tr:last-child td {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.metrics-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(2 6 23 / 0.72);
+}
+
+.metrics-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(960px, 100%);
+  max-height: min(760px, 82vh);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.metrics-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.metrics-modal-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.metrics-modal pre {
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  color: var(--ink-secondary);
+  background: var(--bg-inset);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre;
 }
 
 @keyframes rise-in {
@@ -2280,7 +2417,8 @@ tbody tr:hover {
   .control-bar,
   .summary-grid,
   .skill-grid,
-  .query-toolbar {
+  .query-toolbar,
+  .skill-param-row {
     grid-template-columns: 1fr;
   }
 
@@ -2316,8 +2454,15 @@ const dashboardState = {
   tradeSummary: null,
   tradePage: null,
   auditEvents: [],
-  auditPage: null
+  auditPage: null,
+  expandedAuditPayloadKeys: new Set(),
+  skills: [],
+  optimizerRecommendations: [],
+  pnlLedger: null,
+  experiments: []
 };
+
+const INITIAL_DRY_RUN_CAPITAL_SOL = 25;
 
 function byId(id) {
   return document.getElementById(id);
@@ -2629,6 +2774,43 @@ function requestAuthToken() {
   });
 }
 
+function closeMetricsModal() {
+  const existing = byId("metrics-modal-backdrop");
+  if (existing) {
+    existing.remove();
+  }
+}
+
+function showMetricsModal(metricsText) {
+  closeMetricsModal();
+
+  const backdrop = document.createElement("div");
+  backdrop.id = "metrics-modal-backdrop";
+  backdrop.className = "metrics-modal-backdrop";
+  backdrop.innerHTML =
+    '<section class="metrics-modal" role="dialog" aria-modal="true" aria-labelledby="metrics-modal-title">' +
+      '<div class="metrics-modal-head">' +
+        '<div><p class="eyebrow">Prometheus</p><h2 id="metrics-modal-title">指标快照</h2></div>' +
+        '<button type="button" class="action-button action-ghost" data-action="close-metrics">关闭</button>' +
+      "</div>" +
+      "<pre>" + escapeHtml(metricsText) + "</pre>" +
+    "</section>";
+
+  document.body.appendChild(backdrop);
+
+  backdrop.addEventListener("click", function (event) {
+    if (event.target === backdrop) {
+      closeMetricsModal();
+    }
+  });
+
+  backdrop.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      closeMetricsModal();
+    }
+  });
+}
+
 async function apiRequest(url, options) {
   const buildRequestOptions = function () {
     return {
@@ -2821,22 +3003,41 @@ function renderAssetReport(report) {
 
   const summary = report.summary;
   const current = summary.current ?? {};
-  const totalPnlSol = summary.totalPnlSol;
-  const totalPnlUsd = summary.totalPnlUsd;
-  const totalPnlPercent = summary.totalPnlPercent;
+  const snapshotPnlSol = summary.totalPnlSol;
+  const snapshotPnlUsd = summary.totalPnlUsd;
+  const snapshotPnlPercent = summary.totalPnlPercent;
+  const ledgerSummary = dashboardState.pnlLedger?.summary ?? {};
+  const ledgerPnlSol = ledgerSummary.totalPnlSol;
+  const ledgerPnlPercent = ledgerSummary.totalPnlPercent;
+  const equityChangeSol = Number.isFinite(current.totalEquitySol)
+    ? current.totalEquitySol - INITIAL_DRY_RUN_CAPITAL_SOL
+    : undefined;
+  const equityChangePercent = Number.isFinite(equityChangeSol)
+    ? (equityChangeSol / INITIAL_DRY_RUN_CAPITAL_SOL) * 100
+    : undefined;
   const bestDay = summary.bestDay;
   const worstDay = summary.worstDay;
+  const dataQuality = summary.dataQuality ?? {};
+  const rejectedSnapshots = dataQuality.rejectedSnapshotCount ?? 0;
+  const staleSnapshots = dataQuality.staleSnapshotCount ?? 0;
+  const snapshotCount = dataQuality.snapshotCount ?? 0;
+  const qualityTone = rejectedSnapshots > 0 ? " metric-negative" : "";
+  const totalPositions = ledgerSummary.totalPositions ?? 0;
+  const closedPositions = ledgerSummary.closedPositions ?? 0;
 
   return (
     '<div class="report-summary">' +
       '<article class="report-primary">' +
-        '<span class="report-primary-label">' + escapeHtml(report.range?.days ?? dashboardState.reportDays) + "天估算盈亏 · " + escapeHtml(summary.tradeCount ?? 0) + " 个成功动作</span>" +
-        '<strong class="report-primary-value ' + metricClass(totalPnlSol) + '">' + escapeHtml(formatSignedNumber(totalPnlSol, { maximumFractionDigits: 4 })) + " SOL</strong>" +
-        '<span class="report-primary-note">估算 $' + escapeHtml(formatSignedNumber(totalPnlUsd, { maximumFractionDigits: 2 })) + " · " + escapeHtml(formatSignedNumber(totalPnlPercent, { maximumFractionDigits: 2 })) + "%</span>" +
+        '<span class="report-primary-label">当前净收益 · 初始 ' + escapeHtml(formatNumber(INITIAL_DRY_RUN_CAPITAL_SOL, { maximumFractionDigits: 2 })) + " SOL</span>" +
+        '<strong class="report-primary-value ' + metricClass(equityChangeSol) + '">' + escapeHtml(formatSignedNumber(equityChangeSol, { maximumFractionDigits: 4 })) + " SOL</strong>" +
+        '<span class="report-primary-note">当前权益 ' + escapeHtml(formatNumber(current.totalEquitySol, { maximumFractionDigits: 4 })) + " SOL · " + escapeHtml(formatSignedNumber(equityChangePercent, { maximumFractionDigits: 2 })) + "%</span>" +
       "</article>" +
-      '<article class="report-metric-card"><span>当前权益</span><strong>' + escapeHtml(formatNumber(current.totalEquitySol, { maximumFractionDigits: 4 })) + " SOL</strong><small>$" + escapeHtml(formatNumber(current.totalEquityUsd, { maximumFractionDigits: 2 })) + "</small></article>" +
-      '<article class="report-metric-card"><span>胜负天数</span><strong>' + escapeHtml(summary.positiveDays ?? 0) + " / " + escapeHtml(summary.negativeDays ?? 0) + '</strong><small>盈利 / 亏损</small></article>' +
+      '<article class="report-metric-card"><span>当前权益</span><strong>' + escapeHtml(formatNumber(current.totalEquitySol, { maximumFractionDigits: 4 })) + " SOL</strong><small>" + escapeHtml(closedPositions) + " / " + escapeHtml(totalPositions) + " 仓位已关闭</small></article>" +
+      '<article class="report-metric-card"><span>账本 PnL</span><strong class="' + metricClass(ledgerPnlSol) + '">' + escapeHtml(formatSignedNumber(ledgerPnlSol, { maximumFractionDigits: 4 })) + " SOL</strong><small>" + escapeHtml(formatSignedNumber(ledgerPnlPercent, { maximumFractionDigits: 2 })) + "% realized</small></article>" +
+      '<article class="report-metric-card"><span>' + escapeHtml(report.range?.days ?? dashboardState.reportDays) + '天快照估算</span><strong class="' + metricClass(snapshotPnlSol) + '">' + escapeHtml(formatSignedNumber(snapshotPnlSol, { maximumFractionDigits: 4 })) + " SOL</strong><small>过程 mark-to-market，不是最终收益</small></article>" +
+      '<article class="report-metric-card"><span>成功动作</span><strong>' + escapeHtml(summary.tradeCount ?? 0) + '</strong><small>' + escapeHtml(summary.positiveDays ?? 0) + " / " + escapeHtml(summary.negativeDays ?? 0) + " 盈利/亏损日</small></article>" +
       '<article class="report-metric-card"><span>最佳 / 最差</span><strong class="' + metricClass(bestDay?.pnlSol) + '">' + escapeHtml(bestDay?.date ?? "n/a") + '</strong><small class="' + metricClass(worstDay?.pnlSol) + '">' + escapeHtml(worstDay?.date ?? "n/a") + "</small></article>" +
+      '<article class="report-metric-card"><span>数据质量</span><strong class="' + qualityTone.trim() + '">' + escapeHtml(formatNumber(rejectedSnapshots, { maximumFractionDigits: 0 })) + " rejected</strong><small>" + escapeHtml(formatNumber(staleSnapshots, { maximumFractionDigits: 0 })) + " stale / " + escapeHtml(formatNumber(snapshotCount, { maximumFractionDigits: 0 })) + " snapshots</small></article>" +
     "</div>" +
     '<section class="calendar-card">' +
       '<div class="calendar-title">' +
@@ -2865,6 +3066,11 @@ function renderOverview(status, skills, positions) {
     return skill.status === "active" || skill.status === "canary";
   }).length;
   const portfolio = status.portfolio ?? {};
+  const pnlLedger = dashboardState.pnlLedger?.summary ?? status.pnlLedger ?? {};
+  const canary = status.canary ?? {};
+  const ledgerWarnings = typeof pnlLedger.warningCount === "number" && pnlLedger.warningCount > 0
+    ? " · warnings " + formatNumber(pnlLedger.warningCount, { maximumFractionDigits: 0 })
+    : "";
   const cards = [
     {
       label: "可用资金",
@@ -2893,6 +3099,19 @@ function renderOverview(status, skills, positions) {
         "$" + formatSignedNumber(portfolio.activeMarkChange24hUsd, { maximumFractionDigits: 2 }) +
         " · " + formatSignedNumber(portfolio.activeMarkChange24hPercent, { maximumFractionDigits: 2 }) + "%",
       tone: portfolio.activeMarkChange24hSol
+    },
+    {
+      label: "账本 PnL",
+      value: formatSignedNumber(pnlLedger.totalPnlSol, { maximumFractionDigits: 4 }) + " SOL",
+      note: "cost " + formatNumber(pnlLedger.costsPaidSol, { maximumFractionDigits: 4 }) + " SOL" + ledgerWarnings,
+      tone: pnlLedger.totalPnlSol
+    },
+    {
+      label: "Canary",
+      value: canary.enabled ? "ON" : "OFF",
+      note:
+        "stale " + formatNumber(canary.staleActivePositions) +
+        " · worst " + formatSignedNumber(canary.worstActivePnlPercent, { maximumFractionDigits: 2 }) + "%"
     },
     {
       label: "平均 PnL",
@@ -3109,6 +3328,9 @@ function renderAudit(events) {
     const compactPayload = JSON.stringify(payload).slice(0, 240);
     const fullPayload = JSON.stringify(payload, null, 2);
     const payloadId = "audit-payload-" + index;
+    const payloadKey = auditPayloadKey(event, index);
+    const payloadOpenClass = dashboardState.expandedAuditPayloadKeys.has(payloadKey) ? " is-open" : "";
+    const payloadExpanded = payloadOpenClass ? "true" : "false";
 
     return (
       '<div class="feed-item">' +
@@ -3120,11 +3342,20 @@ function renderAudit(events) {
           "<span>" + escapeHtml(formatDate(event.timestamp)) + "</span>" +
         "</div>" +
         '<div class="subtle">' + escapeHtml(compactPayload) + "</div>" +
-        '<button class="inline-action" data-action="toggle-event-payload" data-target-id="' + escapeHtml(payloadId) + '">Payload</button>' +
-        '<pre id="' + escapeHtml(payloadId) + '" class="event-payload">' + escapeHtml(fullPayload) + "</pre>" +
+        '<button class="inline-action" data-action="toggle-event-payload" data-target-id="' + escapeHtml(payloadId) + '" data-payload-key="' + escapeHtml(payloadKey) + '" aria-expanded="' + payloadExpanded + '">Payload</button>' +
+        '<pre id="' + escapeHtml(payloadId) + '" class="event-payload' + payloadOpenClass + '">' + escapeHtml(fullPayload) + "</pre>" +
       "</div>"
     );
   }).join("");
+}
+
+function auditPayloadKey(event, index) {
+  const payload = event.payload ?? {};
+  const cycleId = typeof payload.cycleId === "string" ? payload.cycleId : "";
+  const timestamp = event.timestamp ?? payload.timestamp ?? "";
+  const source = event.source ?? "audit";
+  const fingerprint = JSON.stringify(payload).slice(0, 512);
+  return [source, timestamp, cycleId, fingerprint || index].join("|");
 }
 
 function compactId(value) {
@@ -3350,7 +3581,183 @@ function findSkillRecommendation(recommendations, skill) {
   });
 }
 
-function renderSkillOptimizer(recommendation) {
+function findSkillExperiment(skill) {
+  return (dashboardState.experiments ?? []).find(function (experiment) {
+    return experiment.skillId === skill.id && experiment.skillVersion === skill.version;
+  });
+}
+
+const SKILL_CONFIG_FIELDS = [
+  {
+    path: "params.direction",
+    section: "params",
+    key: "direction",
+    label: "布局方向",
+    type: "select",
+    options: ["below", "above", "both"],
+    help: "决定流动性放在当前价格下方、上方还是双边。below 偏防守接回调，both 更吃波动手续费但承受双边价格风险。"
+  },
+  {
+    path: "params.distributionType",
+    section: "params",
+    key: "distributionType",
+    label: "分布形状",
+    type: "select",
+    options: ["Spot", "Curve", "BidAsk"],
+    help: "决定资金在 bin 里的形状。Spot 更均匀，Curve 更集中，BidAsk 更偏两侧防守。"
+  },
+  {
+    path: "params.binCount",
+    section: "params",
+    key: "binCount",
+    label: "Bin 数量",
+    type: "number",
+    min: 1,
+    max: 500,
+    step: 1,
+    unit: "bins",
+    help: "控制覆盖宽度。数值越大越不容易出界但资金更分散；数值越小资金更集中，收益弹性更高但更容易触发重平衡或止损。"
+  },
+  {
+    path: "riskLimits.maxPositionSizePercent",
+    section: "riskLimits",
+    key: "maxPositionSizePercent",
+    label: "单仓资金上限",
+    type: "number",
+    min: 0.01,
+    max: 100,
+    step: 0.1,
+    unit: "%",
+    help: "单个仓位最多占组合资金的比例。调大后单次亏损影响更大；调小后开仓更保守。"
+  },
+  {
+    path: "riskLimits.maxTotalExposurePercent",
+    section: "riskLimits",
+    key: "maxTotalExposurePercent",
+    label: "策略总敞口",
+    type: "number",
+    min: 0.01,
+    max: 100,
+    step: 0.1,
+    unit: "%",
+    help: "同一个策略所有活跃仓位合计最多占组合资金的比例。调大后该策略会更容易继续开仓；调小后更容易被风控挡住。"
+  },
+  {
+    path: "riskLimits.maxConcurrentPositions",
+    section: "riskLimits",
+    key: "maxConcurrentPositions",
+    label: "并发仓位",
+    type: "number",
+    min: 1,
+    max: 100,
+    step: 1,
+    unit: "个",
+    help: "该策略最多同时持有多少个仓位。调大后分散度提高但管理动作更多；调小后更集中。"
+  },
+  {
+    path: "riskLimits.stopLossPercent",
+    section: "riskLimits",
+    key: "stopLossPercent",
+    label: "止损线",
+    type: "number",
+    min: 1,
+    max: 95,
+    step: 0.5,
+    unit: "%",
+    help: "仓位亏损达到该比例会触发退出。数值越小止损越早，回撤更可控但可能频繁被洗出；数值越大容忍更高回撤。"
+  },
+  {
+    path: "riskLimits.maxAliveHours",
+    section: "riskLimits",
+    key: "maxAliveHours",
+    label: "最长持仓",
+    type: "number",
+    min: 1,
+    max: 720,
+    step: 1,
+    unit: "小时",
+    help: "仓位最多存活多久。调短后过期退出更快，降低长期拖累；调长后给池子更多恢复时间。"
+  },
+  {
+    path: "riskLimits.maxDailyRebalances",
+    section: "riskLimits",
+    key: "maxDailyRebalances",
+    label: "每日重平衡上限",
+    type: "number",
+    min: 0,
+    max: 100,
+    step: 1,
+    unit: "次/天",
+    help: "单个仓位每天最多重平衡次数。调大后追价更积极但动作更多；调小后减少过度调整。"
+  }
+];
+
+function getConfigFieldValue(skill, field) {
+  return skill?.[field.section]?.[field.key];
+}
+
+function getRecommendationFieldValue(recommendation, field) {
+  const source = field.section === "params" ? recommendation?.paramsPatch : recommendation?.riskLimitsPatch;
+  return source?.[field.key];
+}
+
+function renderSkillConfigInput(skill, field) {
+  const currentValue = getConfigFieldValue(skill, field);
+  const name = field.path;
+  if (field.type === "select") {
+    return (
+      '<select data-skill-param-path="' + escapeHtml(name) + '">' +
+        field.options.map(function (option) {
+          const selected = option === currentValue ? " selected" : "";
+          return '<option value="' + escapeHtml(option) + '"' + selected + ">" + escapeHtml(option) + "</option>";
+        }).join("") +
+      "</select>"
+    );
+  }
+
+  return (
+    '<input type="number" data-skill-param-path="' + escapeHtml(name) + '" min="' + escapeHtml(String(field.min)) +
+    '" max="' + escapeHtml(String(field.max)) + '" step="' + escapeHtml(String(field.step)) +
+    '" value="' + escapeHtml(String(currentValue ?? "")) + '" />'
+  );
+}
+
+function renderSkillConfigEditor(skill, recommendation) {
+  const hasPatch = Boolean(
+    Object.keys(recommendation?.paramsPatch ?? {}).length || Object.keys(recommendation?.riskLimitsPatch ?? {}).length
+  );
+  const rows = SKILL_CONFIG_FIELDS.map(function (field) {
+    const currentValue = getConfigFieldValue(skill, field);
+    const suggestedValue = getRecommendationFieldValue(recommendation, field);
+    const suggested =
+      suggestedValue === undefined || suggestedValue === currentValue
+        ? ""
+        : '<span class="skill-param-suggestion">建议 ' + escapeHtml(String(currentValue)) + " -> " + escapeHtml(String(suggestedValue)) + "</span>";
+
+    return (
+      '<div class="skill-param-row">' +
+        '<div class="skill-param-label"><strong>' + escapeHtml(field.label) + '</strong><span>' + escapeHtml(field.path) + "</span></div>" +
+        '<div class="skill-param-input">' + renderSkillConfigInput(skill, field) + suggested + "</div>" +
+        '<div class="skill-param-help"><strong>' + escapeHtml(field.unit ? "单位：" + field.unit : "选项") + '</strong><span>' + escapeHtml(field.help) + "</span></div>" +
+      "</div>"
+    );
+  }).join("");
+
+  return (
+    '<details class="skill-config-editor"' + (hasPatch ? " open" : "") + ' data-skill-id="' + escapeHtml(skill.id) + '" data-skill-version="' + escapeHtml(skill.version) + '">' +
+      "<summary>参数说明与手动编辑</summary>" +
+      '<div class="skill-config-grid">' + rows + "</div>" +
+      '<div class="skill-config-actions">' +
+        (hasPatch
+          ? '<button class="action-button action-ghost" data-action="fill-skill-optimizer" data-skill-id="' + escapeHtml(skill.id) + '" data-skill-version="' + escapeHtml(skill.version) + '" data-busy-key="' + escapeHtml("skill:" + skill.id) + '">填入建议值</button>'
+          : "") +
+        '<button class="action-button action-safe" data-action="save-skill-config" data-skill-id="' + escapeHtml(skill.id) + '" data-skill-version="' + escapeHtml(skill.version) + '" data-busy-key="' + escapeHtml("skill:" + skill.id) + '">保存编辑</button>' +
+      "</div>" +
+    "</details>"
+  );
+}
+
+function renderSkillOptimizer(recommendation, skill) {
   if (!recommendation) {
     return (
       '<div class="skill-optimizer">' +
@@ -3364,6 +3771,7 @@ function renderSkillOptimizer(recommendation) {
     riskLimits: recommendation.riskLimitsPatch ?? {}
   };
   const hasPatch = Object.keys(patch.params).length > 0 || Object.keys(patch.riskLimits).length > 0;
+  const canApply = hasPatch && !recommendation.disabledReason;
 
   return (
     '<div class="skill-optimizer">' +
@@ -3377,6 +3785,15 @@ function renderSkillOptimizer(recommendation) {
       "</div>" +
       '<p class="subtle">' + escapeHtml(recommendation.disabledReason ?? recommendation.reason ?? "") + "</p>" +
       (hasPatch ? '<pre class="optimizer-patch">' + escapeHtml(JSON.stringify(patch, null, 2)) + "</pre>" : '<span class="subtle">无参数 patch</span>') +
+      (canApply
+        ? '<div class="optimizer-actions"><button class="action-button action-safe" data-action="apply-skill-optimizer" data-skill-id="' +
+          escapeHtml(skill.id) +
+          '" data-skill-version="' +
+          escapeHtml(skill.version) +
+          '" data-busy-key="' +
+          escapeHtml("skill:" + skill.id) +
+          '">应用建议</button></div>'
+        : "") +
     "</div>"
   );
 }
@@ -3391,6 +3808,7 @@ function renderSkills(skills, recommendations) {
     const canaryValue = typeof skill.canaryPercent === "number" ? skill.canaryPercent : 10;
     const stats = skill.stats;
     const recommendation = findSkillRecommendation(recommendations, skill);
+    const experiment = findSkillExperiment(skill);
 
     return (
       '<article class="skill-card">' +
@@ -3415,6 +3833,8 @@ function renderSkills(skills, recommendations) {
           "<span>active " + escapeHtml(formatNumber(stats?.activePositions, { maximumFractionDigits: 0 })) + "</span>" +
           "<span>win rate " + escapeHtml(formatNumber(stats?.winRate)) + "%</span>" +
           "<span>avg hold " + escapeHtml(formatNumber(stats?.averagePositionHours)) + "h</span>" +
+          "<span>experiment " + escapeHtml(experiment?.status ?? "n/a") + "</span>" +
+          "<span>stale " + escapeHtml(formatNumber((experiment?.sample?.staleRatio ?? 0) * 100, { maximumFractionDigits: 1 })) + "%</span>" +
         "</div>" +
         '<div class="skill-meta">' +
           "<span>fees " + escapeHtml(formatNumber(stats?.totalFeesClaimedSol)) + " SOL</span>" +
@@ -3430,7 +3850,8 @@ function renderSkills(skills, recommendations) {
           '<input id="canary-' + escapeHtml(skill.id) + '" type="number" min="1" max="100" value="' + escapeHtml(String(canaryValue)) + '" />' +
           '<button class="skill-canary" data-action="canary-skill" data-skill-id="' + escapeHtml(skill.id) + '" data-busy-key="' + escapeHtml(key) + '">Canary</button>' +
         "</div>" +
-        renderSkillOptimizer(recommendation) +
+        renderSkillConfigEditor(skill, recommendation) +
+        renderSkillOptimizer(recommendation, skill) +
       "</article>"
     );
   }).join("");
@@ -3474,6 +3895,13 @@ function syncRefreshTimer() {
     dashboardState.refreshTimer = null;
   }
 
+  if (dashboardState.refreshIntervalMs <= 0) {
+    closeStatusStream();
+    return;
+  }
+
+  connectStatusStream();
+
   if (dashboardState.refreshIntervalMs > 0) {
     dashboardState.refreshTimer = window.setInterval(function () {
       refreshDashboard(false);
@@ -3498,6 +3926,11 @@ function connectStatusStream() {
     return;
   }
 
+  if (dashboardState.refreshIntervalMs <= 0) {
+    closeStatusStream();
+    return;
+  }
+
   closeStatusStream();
 
   const stream = new window.EventSource(buildStreamUrl("/events/status"));
@@ -3509,6 +3942,9 @@ function connectStatusStream() {
 
   stream.addEventListener("error", function () {
     closeStatusStream();
+    if (dashboardState.refreshIntervalMs <= 0) {
+      return;
+    }
     dashboardState.streamReconnectTimer = window.setTimeout(function () {
       connectStatusStream();
     }, 3000);
@@ -3536,7 +3972,9 @@ async function refreshDashboard(showToastOnSuccess) {
       apiRequest("/positions?status=active&limit=500"),
       apiRequest(tradeUrl),
       apiRequest(auditUrl),
-      apiRequest(reportUrl)
+      apiRequest(reportUrl),
+      apiRequest("/pnl/ledger"),
+      apiRequest("/skills/experiments")
     ]);
 
     const status = results[0];
@@ -3548,6 +3986,8 @@ async function refreshDashboard(showToastOnSuccess) {
     const tradePayload = results[5];
     const auditPayload = results[6];
     const portfolioReport = results[7];
+    const pnlLedger = results[8];
+    const experimentsPayload = results[9];
     const trades = tradePayload.trades ?? [];
     const auditEvents = auditPayload.events ?? [];
     dashboardState.trades = trades;
@@ -3556,6 +3996,10 @@ async function refreshDashboard(showToastOnSuccess) {
     dashboardState.auditEvents = auditEvents;
     dashboardState.auditPage = auditPayload.page ?? null;
     dashboardState.portfolioReport = portfolioReport;
+    dashboardState.skills = skills;
+    dashboardState.optimizerRecommendations = optimizerRecommendations;
+    dashboardState.pnlLedger = pnlLedger;
+    dashboardState.experiments = experimentsPayload.experiments ?? [];
 
     updateHeader(status);
     syncPositionSkillOptions(skills);
@@ -3717,6 +4161,199 @@ function resetTradeFilters() {
   });
 }
 
+function findOptimizerRecommendation(skillId, skillVersion) {
+  return (dashboardState.optimizerRecommendations ?? []).find(function (recommendation) {
+    return recommendation.skillId === skillId && recommendation.skillVersion === skillVersion;
+  });
+}
+
+function findDashboardSkill(skillId, skillVersion) {
+  return (dashboardState.skills ?? []).find(function (skill) {
+    return skill.id === skillId && skill.version === skillVersion;
+  });
+}
+
+function findConfigField(path) {
+  return SKILL_CONFIG_FIELDS.find(function (field) {
+    return field.path === path;
+  });
+}
+
+function formatFieldValue(value, field) {
+  return String(value) + (field?.unit ? " " + field.unit : "");
+}
+
+function formatOptimizerPatch(patch) {
+  const lines = [];
+  Object.keys(patch.params ?? {}).sort().forEach(function (key) {
+    const field = findConfigField("params." + key);
+    lines.push((field?.label ?? "params." + key) + " = " + formatFieldValue(patch.params[key], field));
+  });
+  Object.keys(patch.riskLimits ?? {}).sort().forEach(function (key) {
+    const field = findConfigField("riskLimits." + key);
+    lines.push((field?.label ?? "riskLimits." + key) + " = " + formatFieldValue(patch.riskLimits[key], field));
+  });
+  return lines.join("\\n");
+}
+
+function readEditorValue(input, field) {
+  if (field.type === "select") {
+    return input.value;
+  }
+
+  const value = Number(input.value);
+  if (!Number.isFinite(value)) {
+    throw new Error(field.label + " 必须填写数字。");
+  }
+  if (value < field.min || value > field.max) {
+    throw new Error(field.label + " 必须在 " + field.min + " 到 " + field.max + " 之间。");
+  }
+  return field.step === 1 ? Math.trunc(value) : value;
+}
+
+function collectSkillConfigPatch(skillId, skillVersion) {
+  const skill = findDashboardSkill(skillId, skillVersion);
+  if (!skill) {
+    throw new Error("找不到当前 Skill 快照。");
+  }
+
+  const editor = document.querySelector(
+    ".skill-config-editor[data-skill-id='" + CSS.escape(skillId) + "'][data-skill-version='" + CSS.escape(skillVersion) + "']"
+  );
+  if (!editor) {
+    throw new Error("找不到参数编辑区域。");
+  }
+
+  const patch = {
+    version: skillVersion,
+    params: {},
+    riskLimits: {}
+  };
+  const changes = [];
+
+  editor.querySelectorAll("[data-skill-param-path]").forEach(function (input) {
+    const path = input.dataset.skillParamPath;
+    const field = findConfigField(path);
+    if (!field || !("value" in input)) {
+      return;
+    }
+
+    const nextValue = readEditorValue(input, field);
+    const currentValue = getConfigFieldValue(skill, field);
+    if (String(nextValue) === String(currentValue)) {
+      return;
+    }
+
+    patch[field.section][field.key] = nextValue;
+    changes.push(field.label + ": " + formatFieldValue(currentValue, field) + " -> " + formatFieldValue(nextValue, field));
+  });
+
+  if (Object.keys(patch.params).length === 0) {
+    delete patch.params;
+  }
+  if (Object.keys(patch.riskLimits).length === 0) {
+    delete patch.riskLimits;
+  }
+
+  return {
+    patch,
+    changes
+  };
+}
+
+function fillSkillOptimizerRecommendation(skillId, skillVersion) {
+  const recommendation = findOptimizerRecommendation(skillId, skillVersion);
+  if (!recommendation) {
+    showToast("没有建议可填入", skillId + " 当前没有 Optimizer patch。", "tone-warn");
+    return;
+  }
+
+  const editor = document.querySelector(
+    ".skill-config-editor[data-skill-id='" + CSS.escape(skillId) + "'][data-skill-version='" + CSS.escape(skillVersion) + "']"
+  );
+  if (!editor) {
+    return;
+  }
+
+  let changed = 0;
+  SKILL_CONFIG_FIELDS.forEach(function (field) {
+    const suggested = getRecommendationFieldValue(recommendation, field);
+    if (suggested === undefined) {
+      return;
+    }
+    const input = editor.querySelector("[data-skill-param-path='" + CSS.escape(field.path) + "']");
+    if (input && "value" in input) {
+      input.value = String(suggested);
+      changed += 1;
+    }
+  });
+
+  showToast("已填入建议值", changed > 0 ? "请检查参数说明后点击保存编辑。" : "建议没有可填入的字段。");
+}
+
+async function saveSkillConfig(skillId, skillVersion) {
+  let collected;
+  try {
+    collected = collectSkillConfigPatch(skillId, skillVersion);
+  } catch (error) {
+    showToast("参数不合法", error instanceof Error ? error.message : "请检查参数。", "tone-warn");
+    return;
+  }
+
+  if (collected.changes.length === 0) {
+    showToast("没有变更", skillId + " 的参数没有变化。", "tone-warn");
+    return;
+  }
+
+  const confirmed = window.confirm("确认保存 " + skillId + " 的参数修改？\\n\\n" + collected.changes.join("\\n"));
+  if (!confirmed) {
+    return;
+  }
+
+  await withAction("skill:" + skillId, async function () {
+    await apiRequest("/skills/" + encodeURIComponent(skillId) + "/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collected.patch)
+    });
+    showToast("参数已保存", collected.changes.join("；"), "tone-safe");
+    await refreshDashboard(false);
+  });
+}
+
+async function applySkillOptimizerRecommendation(skillId, skillVersion) {
+  const recommendation = findOptimizerRecommendation(skillId, skillVersion);
+  const patch = {
+    params: recommendation?.paramsPatch ?? {},
+    riskLimits: recommendation?.riskLimitsPatch ?? {}
+  };
+  const patchSummary = formatOptimizerPatch(patch);
+  if (!recommendation || patchSummary.length === 0) {
+    showToast("没有可应用的建议", skillId + " 当前没有参数 patch。", "tone-warn");
+    return;
+  }
+
+  const confirmed = window.confirm("确认应用 " + skillId + " 的 Optimizer 建议？\\n\\n" + patchSummary);
+  if (!confirmed) {
+    return;
+  }
+
+  await withAction("skill:" + skillId, async function () {
+    const result = await apiRequest("/skills/" + encodeURIComponent(skillId) + "/optimizer/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: skillVersion })
+    });
+    const appliedPatch = result.patch ?? patch;
+    showToast(
+      result.applied ? "优化建议已应用" : "没有应用建议",
+      result.applied ? formatOptimizerPatch(appliedPatch) : result.reason ?? "建议没有可应用的 patch。",
+      result.applied ? "tone-safe" : "tone-warn"
+    );
+    await refreshDashboard(false);
+  });
+}
+
 async function runSkillAction(action, skillId) {
   const key = "skill:" + skillId;
   await withAction(key, async function () {
@@ -3756,6 +4393,13 @@ async function refreshSkillOptimizer() {
   });
 }
 
+async function openMetricsPanel() {
+  await withAction("metrics", async function () {
+    const metricsText = await apiRequest("/dashboard/prometheus");
+    showMetricsModal(metricsText);
+  });
+}
+
 async function runForceExit(positionId) {
   const confirmed = window.confirm("确认强制撤出仓位 " + positionId + "？");
   if (!confirmed) {
@@ -3781,10 +4425,27 @@ document.addEventListener("click", function (event) {
     return;
   }
 
-  if (action === "refresh" || action === "run-main-cycle" || action === "pause" || action === "resume" || action === "emergency-exit-all") {
+  if (action === "refresh") {
     withAction("global:refresh", function () {
       return runControl(action);
     });
+    return;
+  }
+
+  if (action === "run-main-cycle" || action === "pause" || action === "resume" || action === "emergency-exit-all") {
+    withAction("control:" + action, function () {
+      return runControl(action);
+    });
+    return;
+  }
+
+  if (action === "open-metrics") {
+    openMetricsPanel();
+    return;
+  }
+
+  if (action === "close-metrics") {
+    closeMetricsModal();
     return;
   }
 
@@ -3851,6 +4512,15 @@ document.addEventListener("click", function (event) {
     const payload = targetId ? byId(targetId) : null;
     if (payload) {
       payload.classList.toggle("is-open");
+      if (target.dataset.payloadKey) {
+        if (payload.classList.contains("is-open")) {
+          dashboardState.expandedAuditPayloadKeys.add(target.dataset.payloadKey);
+          target.setAttribute("aria-expanded", "true");
+        } else {
+          dashboardState.expandedAuditPayloadKeys.delete(target.dataset.payloadKey);
+          target.setAttribute("aria-expanded", "false");
+        }
+      }
     }
     return;
   }
@@ -3865,6 +4535,33 @@ document.addEventListener("click", function (event) {
 
   if (action === "refresh-skill-optimizer") {
     refreshSkillOptimizer();
+    return;
+  }
+
+  if (action === "apply-skill-optimizer") {
+    const skillId = target.dataset.skillId;
+    const skillVersion = target.dataset.skillVersion;
+    if (skillId && skillVersion) {
+      applySkillOptimizerRecommendation(skillId, skillVersion);
+    }
+    return;
+  }
+
+  if (action === "fill-skill-optimizer") {
+    const skillId = target.dataset.skillId;
+    const skillVersion = target.dataset.skillVersion;
+    if (skillId && skillVersion) {
+      fillSkillOptimizerRecommendation(skillId, skillVersion);
+    }
+    return;
+  }
+
+  if (action === "save-skill-config") {
+    const skillId = target.dataset.skillId;
+    const skillVersion = target.dataset.skillVersion;
+    if (skillId && skillVersion) {
+      saveSkillConfig(skillId, skillVersion);
+    }
     return;
   }
 
@@ -3915,7 +4612,6 @@ window.addEventListener("load", function () {
   setCurrentView(resolveViewFromHash(), !window.location.hash);
   syncReportRangeButtons();
   syncRefreshTimer();
-  connectStatusStream();
   refreshDashboard(false);
 });
 

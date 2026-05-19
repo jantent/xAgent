@@ -106,12 +106,40 @@ export function createAgentConfig(): AgentConfig {
       max_out_of_range_penalty_pct: 35,
       snapshot_retention: 5_000
     },
+    cost_model: {
+      enabled: false,
+      network_fee_lamports: 5_000,
+      priority_fee_lamports: 100_000,
+      jito_tip_lamports: 10_000,
+      rent_per_position_sol: 0.0025,
+      slippage_bps: 80,
+      rebalance_slippage_bps: 120,
+      failed_tx_fee_lamports: 5_000
+    },
     skill_optimizer: {
       enabled: true,
       min_closed_positions: 5,
       min_snapshots: 20,
       evaluation_interval_ms: 1_800_000,
-      max_patch_pct: 20
+      max_patch_pct: 20,
+      auto_apply: false,
+      min_auto_apply_confidence: 0.75,
+      min_auto_apply_closed_positions: 10,
+      auto_apply_actions: ["tighten", "widen", "reduce_risk"]
+    },
+    canary: {
+      enabled: false,
+      max_concurrent_positions: 1,
+      max_position_sol: 0.2,
+      kill_switch: {
+        enabled: true,
+        max_daily_loss_sol: 0.2,
+        max_daily_loss_pct: 1,
+        max_position_loss_pct: 12,
+        max_consecutive_failures: 3,
+        max_pending_action_age_ms: 120_000,
+        max_stale_position_count: 1
+      }
     },
     guardrails: {
       allow_mock_data: true,
@@ -198,7 +226,10 @@ export function createAgentConfig(): AgentConfig {
       max_alive_hours: 168,
       daily_max_loss_pct: 5,
       fee_claim_interval_hours: 8,
-      lincoln_exit_threshold: 1
+      lincoln_exit_threshold: 1,
+      filters: {
+        enabled: false
+      }
     },
     notifications: {
       telegram: {

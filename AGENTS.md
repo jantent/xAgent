@@ -16,6 +16,7 @@ npm run verify         # 完整验证：check → build → test
 npm run start:once     # 跑一次主循环 + 高频 tick（冒烟测试）
 npm run start          # 常驻编排器 + API
 npm run start:no-api   # 只启动编排器
+npm run replay:audit   # 回放 actions 审计，输出资金/PnL 摘要
 npm run wallet:secret  # 钱包密钥 encrypt/decrypt/rotate CLI
 ```
 
@@ -45,7 +46,7 @@ providers/ (数据源/LLM/池子发现) → managers/ (协调) → modules/ (决
 - `src/index.ts` — CLI 入口，解析 `--once`/`--no-api`/`--config`/`--skills`
 - `src/app/runtime.ts` — 运行时装配中心，接线所有 backend/provider/持久化/通知
 - `src/core/shared-state.ts` — 共享状态中心（仓位、资金、Skill 快照）
-- `src/services/telegram-bot-service.ts` — Telegram 只读 command bot（Dashboard 链接、状态、仓位、事件）
+- `src/services/telegram-bot-service.ts` — Telegram 只读 command bot（Dashboard 链接、状态/KPI、基础设施、仓位、交易历史、资产报告、Skill/Optimizer、事件）
 - `src/config/types.ts` — 配置类型定义
 - `src/orchestration/orchestrator.ts` — 主循环 (30min) + 高频 tick (5-10s) 编排
 
@@ -54,6 +55,8 @@ providers/ (数据源/LLM/池子发现) → managers/ (协调) → modules/ (决
 - `dry_run`：本地模拟，默认开发模式
 - `live_sdk`：仓内直连 Meteora SDK / Jupiter Metis / Jito，真实链上执行
 - `live_gateway`：委托外部 gateway 执行，按返回的 `stateOperations` 回写本地状态
+
+当前 dry_run paper trading 会在活跃仓位缺失于本轮候选池时按 pool address 回查真实池子 active bin；系统还包含 PnL ledger、成本模型、硬风控过滤、Canary kill switch、策略实验状态、dry-run 自动调参和 replay/backtest 工具。
 
 ## 改动约束
 
@@ -86,6 +89,7 @@ providers/ (数据源/LLM/池子发现) → managers/ (协调) → modules/ (决
 
 默认配置 `config/agent.yaml`（dry_run），Skill 定义在 `config/skills/*.yaml`。
 API 默认 `127.0.0.1:8787`，`XAGENT_API_TOKEN` 控制认证。
-Telegram bot 默认只读，使用 `TG_BOT_TOKEN` + `TG_CHAT_ID` 授权，可通过 `XAGENT_DASHBOARD_URL` 返回公网 Dashboard 链接。
+Telegram bot 默认只读，使用 `TG_BOT_TOKEN` + `TG_CHAT_ID` 授权，可通过 `XAGENT_DASHBOARD_URL` 返回公网 Dashboard 链接，并覆盖 Dashboard 主要只读视图。
 状态持久化支持 file/SQLite，数据源缓存当前使用 memory backend。
 审计事件支持 `storage.audit_retention` 定期清理，SQLite 与 JSONL 都按 source 裁剪旧事件/超量事件。
+live preflight 会检查 signer/RPC、主数据源、池子发现、Jupiter/Jito/gateway、成本模型、硬过滤、SQLite 主存储，以及活跃仓位与 signer/链上账户一致性。

@@ -16,16 +16,17 @@
   - `dry_run`：本地模拟执行，默认开发模式。
   - `live_sdk`：仓内直连钱包 signer、Meteora SDK、Jupiter Metis、Jito/RPC。
   - `live_gateway`：把动作发给外部 execution gateway，再按返回的 `stateOperations` 回写本地状态。
-- `dry_run` 下默认启用 `paper_trading`：主循环会用真实 Meteora 池子的 active bin、价格和 fee/TVL 近似更新虚拟仓位 PnL、出界状态和虚拟手续费；mock 池子数据只写 stale 快照，不伪造收益。
+- `dry_run` 下默认启用 `paper_trading`：主循环会用真实 Meteora 池子的 active bin、价格和 fee/TVL 近似更新虚拟仓位 PnL、出界状态和虚拟手续费；活跃仓位不在本轮候选池里时会按 pool address 回查，mock 池子数据只写 stale 快照，不伪造收益。
+- 当前实现包含 PnL ledger、dry-run 成本模型、硬风控过滤、Canary kill switch、策略实验状态、dry-run 自动调参和 `replay:audit` 回放工具。
 - GMGN 主数据源默认通过官方 `gmgn-cli` 读取结构化 OpenAPI 数据，不再抓取 `https://gmgn.ai` 网页接口；本地需要安装 `gmgn-cli` 并配置 `GMGN_API_KEY` 或 `~/.config/gmgn/.env`。
 - 真实 HTTP 数据源与真实池子发现都不是强依赖。外部依赖失败时，runtime 会退回 mock provider 或 `config/sample-pools.json`。
 - 额外提供 `config/agent.canary.yaml` 与 `config/agent.prod.yaml` 作为真钱运行配置：禁用运行时 mock、要求 live preflight、使用 SQLite 主存储，并默认启用单实例锁。
 - 审计事件支持 `storage.audit_retention` 定期清理，SQLite 与 JSONL 都按 source 裁剪旧事件/超量事件。
-- 当前 live preflight 不只检查 signer / RPC，也会检查主数据源、池子发现源、Jupiter / Jito / gateway 可达性，以及本地活跃仓位与 signer / 链上账户的一致性。
+- 当前 live preflight 不只检查 signer / RPC，也会检查主数据源、池子发现源、Jupiter / Jito / gateway 可达性、成本模型、硬过滤、SQLite 主存储，以及本地活跃仓位与 signer / 链上账户的一致性。
 - `guardrails.active_position_reconcile=repair` 时，`live_sdk` 启动前会先回放最近审计里的 `stateOperations`、恢复 pending 交易，再把链上仓位账户已不存在的本地 active 记录收敛为 closed。
 - `live_gateway` 若配置了 `execution.live.gateway.positions_path`，启动前会先按远端 active positions 镜像修复本地状态，然后再做一致性校验；如果本地已有 active 仓位但没有配置这个 path，preflight 会拒绝启动。
 - 控制面当前采用 `Hono + 内置 dashboard`，dashboard 优先消费实时状态流，轮询只作为兜底。
-- Telegram command bot 是只读控制面，复用运行时状态与审计 reader，只允许配置的 chat_id 查看状态、仓位、事件和 dashboard 链接，不承载撤仓/暂停等 mutating action。
+- Telegram command bot 是只读控制面，复用 `ControlService`、运行时状态与审计 reader，只允许配置的 chat_id 查看 Dashboard 链接、状态/KPI、基础设施、仓位、交易历史、资产报告、Skill/Optimizer 摘要和审计事件，不承载撤仓/暂停等 mutating action。
 
 ## 技术栈与项目事实
 
@@ -50,6 +51,7 @@ npm run verify
 npm run start:once
 npm run start
 npm run start:no-api
+npm run replay:audit -- --actions runtime/audit/actions.jsonl
 npm run wallet:secret -- encrypt --secret-env WALLET_PRIVATE_KEY --key-env XAGENT_WALLET_KEY --out ./config/wallet.enc.json --key-version v1
 ```
 
@@ -62,6 +64,7 @@ npm run wallet:secret -- encrypt --secret-env WALLET_PRIVATE_KEY --key-env XAGEN
 - `npm run start:once`：跑一次主循环和高频 tick，适合无状态冒烟。
 - `npm run start`：启动常驻 orchestrator 和 API。
 - `npm run start:no-api`：只启动编排器。
+- `npm run replay:audit`：回放 actions 审计，输出 action 计数、资金变动、已实现 PnL 和缺失 close 的仓位。
 - `npm run wallet:secret`：钱包密钥的 `encrypt / decrypt / rotate` CLI。
 
 CI 约定：
@@ -127,7 +130,7 @@ npm run start -- --config config/agent.live-sdk.yaml
 - `src/services/`
   控制面与统计服务，如 skill stats、paper trading 和 control service。
 - `src/services/telegram-bot-service.ts`
-  Telegram 只读 command bot，负责 `/status`、`/dashboard`、`/positions`、`/position`、`/events` 等手机端查询。
+  Telegram 只读 command bot，负责 `/status`、`/infra`、`/dashboard`、`/positions`、`/position`、`/trades`、`/report`、`/skills`、`/optimizer`、`/events` 等手机端查询。
 - `src/wallet/`
   钱包 secret 读取与解密。
 - `config/agent.yaml`
